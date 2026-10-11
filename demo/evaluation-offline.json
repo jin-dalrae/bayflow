@@ -1,0 +1,353 @@
+{
+  "current": {
+    "version": "v3",
+    "coordination_mode": "regional",
+    "active_agents": [
+      "bart_agent",
+      "caltrain_agent",
+      "muni_agent",
+      "regional_coordinator"
+    ],
+    "active_tools": [
+      "feasibility_checker",
+      "local_dispatch_optimizer",
+      "regional_coordination",
+      "transfer_optimizer"
+    ],
+    "planning_horizon_minutes": 60,
+    "replanning_interval_minutes": 5,
+    "context_policy": "regional_shared",
+    "memory_window_steps": 6,
+    "verification_policy": "strict",
+    "optimization_strategy": "transfer_aware"
+  },
+  "initial": {
+    "version": "v1",
+    "coordination_mode": "decentralized",
+    "active_agents": [
+      "muni_agent",
+      "bart_agent",
+      "caltrain_agent"
+    ],
+    "active_tools": [
+      "local_dispatch_optimizer"
+    ],
+    "planning_horizon_minutes": 30,
+    "replanning_interval_minutes": 15,
+    "context_policy": "local_only",
+    "memory_window_steps": 6,
+    "verification_policy": "basic",
+    "optimization_strategy": "local_greedy"
+  },
+  "decisions": [
+    {
+      "mutation_id": "e5c7dd9e-349f-472f-b3a4-44dcf4dde95a",
+      "proposal": {
+        "diagnosis": "Delay and missed connections indicate that local agents cannot observe downstream transfer demand.",
+        "rationale": "Share transfer-neighbor context and authorize a coordinator to synchronize connections within resource limits.",
+        "expected_improvement": "Reduce the fixed passenger-delay and missed-transfer objective without violating fleet constraints.",
+        "confidence": 0.65,
+        "candidate": {
+          "version": "v2",
+          "coordination_mode": "hub_and_spoke",
+          "active_agents": [
+            "bart_agent",
+            "caltrain_agent",
+            "muni_agent",
+            "regional_coordinator"
+          ],
+          "active_tools": [
+            "feasibility_checker",
+            "local_dispatch_optimizer",
+            "regional_coordination",
+            "transfer_optimizer"
+          ],
+          "planning_horizon_minutes": 30,
+          "replanning_interval_minutes": 15,
+          "context_policy": "transfer_neighbors",
+          "memory_window_steps": 6,
+          "verification_policy": "strict",
+          "optimization_strategy": "transfer_aware"
+        }
+      },
+      "candidate": {
+        "version": "v2",
+        "coordination_mode": "hub_and_spoke",
+        "active_agents": [
+          "bart_agent",
+          "caltrain_agent",
+          "muni_agent",
+          "regional_coordinator"
+        ],
+        "active_tools": [
+          "feasibility_checker",
+          "local_dispatch_optimizer",
+          "regional_coordination",
+          "transfer_optimizer"
+        ],
+        "planning_horizon_minutes": 30,
+        "replanning_interval_minutes": 15,
+        "context_policy": "transfer_neighbors",
+        "memory_window_steps": 6,
+        "verification_policy": "strict",
+        "optimization_strategy": "transfer_aware"
+      },
+      "parent_version": "v1",
+      "planner": {
+        "kind": "rule_based",
+        "fallback_reason": "No model API key, or deterministic planner explicitly selected."
+      },
+      "development_run_id": "46784322-658f-4deb-a893-ccd0697ffe5c",
+      "status": "rejected",
+      "evaluation_seeds": [
+        1043,
+        2045,
+        3043
+      ],
+      "evaluator": {
+        "version": "objective-v1",
+        "delay": 0.5,
+        "missed_transfers": 0.2,
+        "unserved": 0.2,
+        "operating_cost": 0.1,
+        "unsafe_action_penalty": 1000,
+        "reference": "Earliest journey on the same selected path with undisrupted published synthetic headways and unlimited capacity."
+      },
+      "accepted": false,
+      "reason": "Rejected: held-out improvement below 2%",
+      "before": {
+        "total_passenger_delay_minutes": 78731.666667,
+        "average_passenger_delay": 15.33,
+        "missed_transfer_rate": 0.00083,
+        "missed_transfers": 2.333333,
+        "transfer_opportunities": 2823.333333,
+        "passenger_wait_time": 45.831,
+        "total_passenger_wait_minutes": 235375.0,
+        "congestion": 4831.333333,
+        "max_station_queue": 751.666667,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1344.666667,
+        "additional_operating_cost": 870.0,
+        "extra_departures": 9.666667,
+        "generated_passengers": 5135.666667,
+        "served_passengers": 3791.0,
+        "objective": 0.312378
+      },
+      "after": {
+        "total_passenger_delay_minutes": 77940.0,
+        "average_passenger_delay": 15.176,
+        "missed_transfer_rate": 0.00083,
+        "missed_transfers": 2.333333,
+        "transfer_opportunities": 2823.333333,
+        "passenger_wait_time": 46.646667,
+        "total_passenger_wait_minutes": 239565.0,
+        "congestion": 5271.333333,
+        "max_station_queue": 806.666667,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1355.333333,
+        "additional_operating_cost": 780.0,
+        "extra_departures": 8.666667,
+        "generated_passengers": 5135.666667,
+        "served_passengers": 3780.333333,
+        "objective": 0.30978
+      },
+      "improvement_percent": 0.8316846897028565
+    },
+    {
+      "mutation_id": "43858f97-e51b-4b49-b9fd-a71579d561d2",
+      "proposal": {
+        "diagnosis": "Delay remains and a neighbor-only coordination proposal was rejected. The narrow context and slow replanning may miss network-wide queue propagation.",
+        "rationale": "Test regional shared observations and faster replanning, keeping the same physical fleet and frozen evaluator.",
+        "expected_improvement": "Reduce the fixed passenger-delay and missed-transfer objective without violating fleet constraints.",
+        "confidence": 0.65,
+        "candidate": {
+          "version": "v3",
+          "coordination_mode": "regional",
+          "active_agents": [
+            "bart_agent",
+            "caltrain_agent",
+            "muni_agent",
+            "regional_coordinator"
+          ],
+          "active_tools": [
+            "feasibility_checker",
+            "local_dispatch_optimizer",
+            "regional_coordination",
+            "transfer_optimizer"
+          ],
+          "planning_horizon_minutes": 60,
+          "replanning_interval_minutes": 5,
+          "context_policy": "regional_shared",
+          "memory_window_steps": 6,
+          "verification_policy": "strict",
+          "optimization_strategy": "transfer_aware"
+        }
+      },
+      "candidate": {
+        "version": "v3",
+        "coordination_mode": "regional",
+        "active_agents": [
+          "bart_agent",
+          "caltrain_agent",
+          "muni_agent",
+          "regional_coordinator"
+        ],
+        "active_tools": [
+          "feasibility_checker",
+          "local_dispatch_optimizer",
+          "regional_coordination",
+          "transfer_optimizer"
+        ],
+        "planning_horizon_minutes": 60,
+        "replanning_interval_minutes": 5,
+        "context_policy": "regional_shared",
+        "memory_window_steps": 6,
+        "verification_policy": "strict",
+        "optimization_strategy": "transfer_aware"
+      },
+      "parent_version": "v1",
+      "planner": {
+        "kind": "rule_based",
+        "fallback_reason": "No model API key, or deterministic planner explicitly selected."
+      },
+      "development_run_id": "2e86fd09-6137-4333-8bdb-1dd4ea7be6de",
+      "status": "promoted",
+      "evaluation_seeds": [
+        1043,
+        2045,
+        3043
+      ],
+      "evaluator": {
+        "version": "objective-v1",
+        "delay": 0.5,
+        "missed_transfers": 0.2,
+        "unserved": 0.2,
+        "operating_cost": 0.1,
+        "unsafe_action_penalty": 1000,
+        "reference": "Earliest journey on the same selected path with undisrupted published synthetic headways and unlimited capacity."
+      },
+      "accepted": true,
+      "reason": "Promoted: held-out objective improved by at least 2%, feasibility passed and commuter regression stayed within 5%.",
+      "before": {
+        "total_passenger_delay_minutes": 78731.666667,
+        "average_passenger_delay": 15.33,
+        "missed_transfer_rate": 0.00083,
+        "missed_transfers": 2.333333,
+        "transfer_opportunities": 2823.333333,
+        "passenger_wait_time": 45.831,
+        "total_passenger_wait_minutes": 235375.0,
+        "congestion": 4831.333333,
+        "max_station_queue": 751.666667,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1344.666667,
+        "additional_operating_cost": 870.0,
+        "extra_departures": 9.666667,
+        "generated_passengers": 5135.666667,
+        "served_passengers": 3791.0,
+        "objective": 0.312378
+      },
+      "after": {
+        "total_passenger_delay_minutes": 59600.0,
+        "average_passenger_delay": 11.605333,
+        "missed_transfer_rate": 0.00083,
+        "missed_transfers": 2.333333,
+        "transfer_opportunities": 2823.333333,
+        "passenger_wait_time": 42.593667,
+        "total_passenger_wait_minutes": 218750.0,
+        "congestion": 6791.0,
+        "max_station_queue": 664.333333,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1132.333333,
+        "additional_operating_cost": 1050.0,
+        "extra_departures": 11.666667,
+        "generated_passengers": 5135.666667,
+        "served_passengers": 4003.333333,
+        "objective": 0.242934
+      },
+      "improvement_percent": 22.230758888269975
+    }
+  ],
+  "comparison": {
+    "static": {
+      "total_passenger_delay_minutes": 102085,
+      "average_passenger_delay": 20.235,
+      "missed_transfer_rate": 0.00354,
+      "missed_transfers": 10,
+      "transfer_opportunities": 2823,
+      "passenger_wait_time": 51.22,
+      "total_passenger_wait_minutes": 258405,
+      "congestion": 7156,
+      "max_station_queue": 967,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1651,
+      "additional_operating_cost": 0,
+      "extra_departures": 0,
+      "generated_passengers": 5045,
+      "served_passengers": 3394,
+      "objective": 0.403408
+    },
+    "fixed": {
+      "total_passenger_delay_minutes": 76335,
+      "average_passenger_delay": 15.131,
+      "missed_transfer_rate": 0.00354,
+      "missed_transfers": 10,
+      "transfer_opportunities": 2823,
+      "passenger_wait_time": 45.608,
+      "total_passenger_wait_minutes": 230090,
+      "congestion": 4681,
+      "max_station_queue": 712,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1218,
+      "additional_operating_cost": 810,
+      "extra_departures": 9,
+      "generated_passengers": 5045,
+      "served_passengers": 3827,
+      "objective": 0.305224
+    },
+    "evolved": {
+      "total_passenger_delay_minutes": 58335,
+      "average_passenger_delay": 11.563,
+      "missed_transfer_rate": 0.00354,
+      "missed_transfers": 10,
+      "transfer_opportunities": 2823,
+      "passenger_wait_time": 42.287,
+      "total_passenger_wait_minutes": 213340,
+      "congestion": 6334,
+      "max_station_queue": 657,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1053,
+      "additional_operating_cost": 990,
+      "extra_departures": 11,
+      "generated_passengers": 5045,
+      "served_passengers": 3992,
+      "objective": 0.240118
+    }
+  },
+  "run_ids": {
+    "static": "f59194ff-4f59-434d-894f-40abd395ee9c",
+    "fixed": "e15d6d05-2b59-4421-a168-06eb5b79f897",
+    "evolved": "ab572665-4400-4b12-93e7-ad87c6b975e1"
+  },
+  "evaluation_seeds": [
+    1043,
+    2045,
+    3043
+  ],
+  "evaluator": {
+    "version": "objective-v1",
+    "delay": 0.5,
+    "missed_transfers": 0.2,
+    "unserved": 0.2,
+    "operating_cost": 0.1,
+    "unsafe_action_penalty": 1000,
+    "reference": "Earliest journey on the same selected path with undisrupted published synthetic headways and unlimited capacity."
+  },
+  "persistence": "offline_preview"
+}
