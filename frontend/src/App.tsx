@@ -1,37 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import TransitMap from "./TransitMap";
 type Data = Record<string, any>;
 const colors: Record<string, string> = {
   muni: "#e9b168",
   muni_bus: "#e9b168",
-  muni_metro: "#e9b168",
+  muni_metro: "#b6a4ef",
   bart: "#75c7f2",
   caltrain: "#df8290",
   walk: "#637b75",
   walking: "#637b75",
-};
-// Diagram positions spread actual connected stations for legible transfers; coordinates remain in node details.
-const schematic: Record<string, {x:number;y:number;dx:number;dy:number;anchor:'start'|'end';label:string}> = {
- emb:{x:430,y:110,dx:-12,dy:-12,anchor:'end',label:'Embarcadero · BART'},
- emb_muni:{x:510,y:110,dx:12,dy:-12,anchor:'start',label:'Embarcadero · Muni'},
- mont:{x:330,y:170,dx:-12,dy:-12,anchor:'end',label:'Montgomery Street'},
- powell:{x:240,y:230,dx:-12,dy:-12,anchor:'end',label:'Powell Street'},
- union:{x:300,y:235,dx:15,dy:-6,anchor:'start',label:'Union Square / Market'},
- civic:{x:150,y:290,dx:-12,dy:-12,anchor:'end',label:'Civic Center'},
- '16th':{x:150,y:360,dx:-12,dy:-12,anchor:'end',label:'16th Street · BART'},
- balboa:{x:150,y:445,dx:-12,dy:-12,anchor:'end',label:'Balboa Park'},
- millbrae:{x:250,y:535,dx:-12,dy:22,anchor:'end',label:'Millbrae · BART'},
- millbrae_caltrain:{x:350,y:535,dx:12,dy:22,anchor:'start',label:'Millbrae · Caltrain'},
- sf_caltrain:{x:420,y:340,dx:-12,dy:-12,anchor:'end',label:'4th & King · Caltrain'},
- king_muni:{x:490,y:300,dx:15,dy:-12,anchor:'start',label:'4th & King · Muni'},
- oracle:{x:640,y:300,dx:12,dy:-12,anchor:'start',label:'Oracle Park'},
- yerba:{x:380,y:300,dx:-14,dy:-12,anchor:'end',label:'Yerba Buena / Moscone'},
- mission_rock:{x:470,y:365,dx:15,dy:-10,anchor:'start',label:'Mission Rock'},
- ucsf:{x:540,y:425,dx:-12,dy:-12,anchor:'end',label:'UCSF / Chase · Muni'},
- chase:{x:660,y:430,dx:12,dy:4,anchor:'start',label:'Chase Center'},
- '22nd':{x:420,y:420,dx:-12,dy:-12,anchor:'end',label:'22nd Street'},
- bayshore:{x:420,y:480,dx:-12,dy:6,anchor:'end',label:'Bayshore'},
- townsend:{x:520,y:470,dx:15,dy:8,anchor:'start',label:'16th / 3rd · Bus'},
- mission_bus:{x:250,y:390,dx:13,dy:4,anchor:'start',label:'16th / Mission · Bus'},
 };
 const color = (s: string = "") =>
   colors[s.toLowerCase().replace(/ /g, "_")] || "#96b5a9";
@@ -98,7 +75,6 @@ export default function App() {
     [seed, setSeed] = useState(42),
     [scenarios, setScenarios] = useState<Data[]>([]),
     [scenario, setScenario] = useState("event_surge"),
-    [geographic, setGeographic] = useState(false),
     [useLlm, setUseLlm] = useState(true);
   const alive = useRef(true);
   const requestGeneration = useRef(0);
@@ -217,27 +193,6 @@ export default function App() {
   }
   const nodes: Data[] = network.nodes || [];
   const edges: Data[] = network.edges || network.connections || [];
-  const points = useMemo(() => {
-    const lons = nodes.map((n) =>
-      num(n.lon ?? n.longitude, n.coordinates?.[0] ?? -122.4),
-    );
-    const lats = nodes.map((n) =>
-      num(n.lat ?? n.latitude, n.coordinates?.[1] ?? 37.77),
-    );
-    const x0 = Math.min(...lons),
-      x1 = Math.max(...lons),
-      y0 = Math.min(...lats),
-      y1 = Math.max(...lats);
-    return Object.fromEntries(
-      nodes.map((n, i) => [
-        n.id || n.node_id,
-        !geographic && schematic[n.id || n.node_id] ? schematic[n.id || n.node_id] : {
-          x: 120 + ((lons[i] - x0) / Math.max(0.01, x1 - x0)) * 550,
-          y: 95 + ((y1 - lats[i]) / Math.max(0.01, y1 - y0)) * 440,
-        },
-      ]),
-    );
-  }, [nodes, geographic]);
   const queues: Data = frame.queues || frame.node_queues || {};
   const selectedNode = nodes.find((n) => (n.id || n.node_id) === selected);
   const comparisons = result?.comparison || {};
@@ -478,156 +433,9 @@ export default function App() {
               </div>
             </div>
             <div className="map-wrap">
-              <svg
-                className="transit-map"
-                viewBox="0 0 800 620"
-                role="img"
-                aria-label="Bay Area transit network with passenger queues"
-              >
-                <defs>
-                  <pattern
-                    id="grid"
-                    width="40"
-                    height="40"
-                    patternUnits="userSpaceOnUse"
-                  >
-                    <path
-                      d="M 40 0 L 0 0 0 40"
-                      fill="none"
-                      stroke="#253632"
-                      strokeWidth=".6"
-                    />
-                  </pattern>
-                  <filter id="glow">
-                    <feGaussianBlur stdDeviation="5" />
-                  </filter>
-                </defs>
-                <rect width="800" height="620" fill="url(#grid)" />
-                <path
-                  d="M420 -20 C500 60 430 130 520 210 C570 300 470 370 535 480 L640 620 L800 620 L800 -20 Z"
-                  fill="#172b2b"
-                  stroke="#28433e"
-                />
-                <path
-                  d="M-20 500 Q100 460 70 380 T170 210 T200 -20"
-                  fill="none"
-                  stroke="#28433e"
-                  strokeWidth="2"
-                />
-                <text
-                  x="608"
-                  y="277"
-                  className="water-label"
-                  transform="rotate(-18 608 277)"
-                >
-                  SAN FRANCISCO BAY
-                </text>
-                <text x="38" y="76" className="geo-label">
-                  SAN FRANCISCO
-                </text>
-                <text x="43" y="570" className="geo-label">
-                  PENINSULA ↓
-                </text>
-                {edges.map((e, i) => {
-                  const a = points[e.source || e.from_node || e.from],
-                    b = points[e.target || e.to_node || e.to];
-                  if (!a || !b) return null;
-                  const operator = e.operator || e.mode || e.service;
-                  return (
-                    <g key={e.id || i}>
-                      <path
-                        d={`M${a.x} ${a.y}L${b.x} ${b.y}`}
-                        stroke={color(operator)}
-                        strokeWidth={activeDispatchEdges.has(e.id) ? 7 : operator === "walk" ? 1.5 : 3.5}
-                        strokeOpacity={activeDispatchEdges.has(e.id) ? 1 : .72}
-                        strokeDasharray={
-                          operator === "walk" ? "4 5" : undefined
-                        }
-                        fill="none"
-                      />
-                    </g>
-                  );
-                })}
-                {(frame.vehicles || []).map((v: Data, i: number) => {
-                  const a = points[v.source],
-                    b = points[v.target];
-                  if (!a || !b) return null;
-                  const t = num(v.progress);
-                  return (
-                    <g key={v.id || i}>
-                      <circle
-                        cx={a.x + (b.x - a.x) * t}
-                        cy={a.y + (b.y - a.y) * t}
-                        r="4.5"
-                        fill={color(v.operator)}
-                        stroke="#0e1d18"
-                        strokeWidth="1.5"
-                      />
-                      <title>
-                        {v.operator}: {v.occupancy}/{v.capacity} passengers
-                      </title>
-                    </g>
-                  );
-                })}
-                {nodes.map((n, i) => {
-                  const id = n.id || n.node_id,
-                    p = points[id],
-                    q = num(queues[id]?.count ?? queues[id]);
-                  if (!p) return null;
-                  return (
-                    <g
-                      className="station"
-                      key={id}
-                      onClick={() => setSelected(id)}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`${n.name}, ${q} waiting`}
-                      onKeyDown={(e) => e.key === "Enter" && setSelected(id)}
-                    >
-                      <title>
-                        {n.name}: {q} passengers waiting
-                      </title>
-                      {q > 0 && (
-                        <circle
-                          cx={p.x}
-                          cy={p.y}
-                          r={Math.min(28, 8 + Math.sqrt(q) / 3)}
-                          fill={q > 200 ? "#ecac63" : "#87b4a0"}
-                          opacity=".14"
-                        />
-                      )}
-                      <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r={selected === id ? 7 : 4.7}
-                        stroke={color(n.operator || n.operators?.[0])}
-                        strokeWidth="2"
-                        fill="#101e1a"
-                      />
-                      <text
-                        x={p.x + (!geographic && schematic[id] ? schematic[id].dx : i % 3 === 0 ? -11 : 11)}
-                        y={p.y + (!geographic && schematic[id] ? schematic[id].dy : i % 3 === 0 ? -12 : 5)}
-                        textAnchor={!geographic && schematic[id] ? schematic[id].anchor : i % 3 === 0 ? "end" : "start"}
-                        className="station-label"
-                      >
-                        {!geographic && schematic[id] ? schematic[id].label : n.name || id}
-                      </text>
-                    </g>
-                  );
-                })}
-                {!nodes.length && (
-                  <text x="400" y="300" textAnchor="middle" fill="#9aaca4">
-                    Waiting for backend network…
-                  </text>
-                )}
-              </svg>
-              <div className="map-zoom">
-                <button onClick={() => setGeographic(!geographic)}>
-                  {geographic ? "Transit schematic" : "Geographic corridor"}
-                </button>
-              </div>
+              <TransitMap nodes={nodes} edges={edges} frame={frame} selected={selected} onSelect={setSelected} activeDispatchEdges={activeDispatchEdges} />
               <div className="map-overlay">
-                <span className="small-caps">{geographic ? "GEOGRAPHIC / MODEL COORDINATES" : "SCHEMATIC / REAL STATIONS"}</span>
+                <span className="small-caps">SAN FRANCISCO / REAL GEOGRAPHY</span>
                 <strong>{time(frame.minute ?? frame.time_minutes ?? 0)}</strong>
                 <span>
                   {frames.length
@@ -648,7 +456,7 @@ export default function App() {
               <div className="map-key">
                 {[
                   ["Muni Bus", "#e9b168"],
-                  ["Muni Metro", "#e9b168"],
+                  ["Muni Metro", "#b6a4ef"],
                   ["BART", "#75c7f2"],
                   ["Caltrain", "#df8290"],
                 ].map(([name, c]) => (

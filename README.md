@@ -102,6 +102,7 @@ The compact topology uses approximate real station coordinates and actual intera
 | Station names, approximate coordinates, transfer geography | Manually curated/derived | Yes |
 | Headways, travel minutes, segment capacities, fleet/driver constraints | Synthetic assumptions | Yes |
 | Passenger OD demand and fictional disruptions | Seeded synthetic | Yes |
+| SFMTA/BART GTFS stops and shapes | Imported agency reference snapshots | Broad geographic map; no extra simulated demand |
 | 511 GTFS schedules | Optional published observations | Import/archive only; not automatically used by simulator |
 | BART hourly OD ridership | Potential calibration source | Not imported or used in the default demo |
 | SFMTA/Caltrain empirical ridership | Potential calibration source | Not imported or used in the default demo |
@@ -161,7 +162,7 @@ cd frontend
 npm run build
 ```
 
-The standard suite passes 22 isolated tests and skips the two opt-in checks. The actual Atlas integration check also passed. `npm test -- --llm -q` passed 23 tests with the Atlas check skipped, including a real Gemini 3.8 Flash request and parsed validated proposal. Two live browser checks passed, including real Atlas baseline write/read and traces from all three operator controllers. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a successful model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
+The standard suite passes 24 isolated tests and skips the two opt-in checks. The actual Atlas integration check also passed. `npm test -- --llm -q` passed 23 tests with the Atlas check skipped, including a real Gemini 3.8 Flash request and parsed validated proposal. Two live browser checks passed, including real Atlas baseline write/read and traces from all three operator controllers. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a successful model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
 
 Run the entire recursive loop without a browser (official Sandbox required):
 
@@ -247,3 +248,17 @@ Python/React and other dependencies are existing open-source libraries. Real pla
 ## License
 
 New project code is [MIT licensed](LICENSE). Third-party libraries retain their own licenses; imported transportation data retains its provider terms. BayFlow is independent of the named transit agencies and does not imply their endorsement.
+
+## Geographic map and requirement audit
+
+The default transit view now uses a real, interactive San Francisco street map with OpenStreetMap attribution. Official agency GTFS reference layers include **3,238 Muni stop records, 50 BART parent stations, 58 Muni bus routes, 7 tram/Metro routes and 3 cable-car routes**. The map provides bus/rail/BART visibility controls, route inspection, station/stop search, and San Francisco/corridor/Bay Area zoom presets. Bus stops appear at neighborhood zoom to keep the map readable. Muni/BART simulated vehicles follow matching GTFS shape segments where available; Caltrain remains a simplified connector.
+
+These broader layers provide geographic context. The operational simulation remains the documented 21-node corridor. No extra reference stop is assigned fabricated simulation demand. The current agency downloads returned feeds with validity ending August 28 and August 30, 2026; those dates are visible and the layers are not advertised as current or live service. Source URLs, timestamps, SHA-256 checksums and transformations are embedded in the JSON. See [data attribution and provider terms](frontend/public/data/ATTRIBUTION.md). Agency data is excluded from the MIT software license.
+
+Rebuild the map dataset after downloading fresh agency ZIP files:
+
+```bash
+.venv/bin/python scripts/build_map_reference.py --muni /path/muni.zip --bart /path/bart.zip
+```
+
+The [requirement audit](demo/REQUIREMENT_AUDIT.md) compares the working version with every major original requirement and records remaining gaps, including empirical demand calibration, GTFS-driven operational schedules and full-region simulation.

@@ -71,3 +71,26 @@ test('official Atlas baseline persists and exposes executable agent traces', asy
   for (let index = 0; index < 17; index++) await slider.press('ArrowLeft');
   await page.screenshot({ path: 'test-results/bayflow-atlas.png', fullPage: true });
 });
+
+test('real geographic map loads agency bus lines and BART station coverage', async ({ page }) => {
+  await page.goto('/?offline=true');
+  await expect(page.getByRole('region', { name: 'Interactive San Francisco street map with simulated transit' })).toBeVisible();
+  await expect(page.locator('.station')).toHaveCount(21);
+  await expect(page.locator('.sf-map-source')).toContainText('3,238 Muni stops · 50 BART stations');
+  await expect.poll(() => page.locator('.leaflet-tile').evaluateAll(images => images.filter(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0).length)).toBeGreaterThan(0);
+  await expect(page.locator('.leaflet-control-attribution')).toContainText('OpenStreetMap');
+  await page.locator('.sf-layer-controls summary').click();
+  await expect(page.getByLabel('Inspect transit route').locator('option')).toHaveCount(83);
+  await page.getByLabel('Inspect transit route').selectOption('Muni:38');
+  await page.getByLabel('Find a station or bus stop').fill('Geary');
+  await expect(page.locator('.sf-layer-controls button')).not.toHaveCount(0);
+  await page.locator('.sf-layer-controls button').first().click();
+  await expect(page.locator('.leaflet-popup')).toContainText('Official GTFS reference stop');
+  await page.getByLabel('Inspect transit route').selectOption('');
+  await page.getByRole('button', {name:'San Francisco',exact:true}).click();
+  await expect(page.locator('.sf-map')).toHaveAttribute('data-zoom', '13');
+  await expect(page.locator('.sf-map')).toHaveAttribute('data-center-lat', '37.775');
+  await page.locator('.sf-layer-controls summary').click();
+  await expect.poll(() => page.locator('.leaflet-tile').evaluateAll(images => images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await page.locator('.map-wrap').screenshot({path:'test-results/bayflow-geographic.png'});
+});
