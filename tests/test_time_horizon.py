@@ -124,7 +124,9 @@ def test_extended_run_actually_boards_all_four_operators(extended):
         group
         for group in extended["passenger_groups"]
         if group["requested_operator"] == "Caltrain"
+        and group["origin"] in {"sf_caltrain", "millbrae_caltrain"}
     ]
+    # The three frozen corridor intents; citywide commuters may also choose Caltrain.
     assert len(caltrain_groups) == 3
     assert {group["born"] for group in caltrain_groups} == {125, 155, 185}
     assert all(10 <= group["count"] <= 30 for group in caltrain_groups)
@@ -139,7 +141,8 @@ def test_extended_run_actually_boards_all_four_operators(extended):
     assert any(
         event["operator"] == "Caltrain" and event["count"] > 0 for event in boarded
     )
-    caltrain_boardings = [event for event in boarded if event["operator"] == "Caltrain"]
+    corridor_ids = {group["cohort_id"] for group in caltrain_groups}
+    caltrain_boardings = [event for event in boarded if event["operator"] == "Caltrain" and event["cohort_id"] in corridor_ids]
     riders = sum(group["count"] for group in caltrain_groups)
     assert riders == 61
     assert (

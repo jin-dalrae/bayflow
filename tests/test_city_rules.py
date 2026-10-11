@@ -22,7 +22,8 @@ def test_city_v1_metrics_exactly_match_before_policy_refactor(reference_run):
     expected=json.loads(Path(__file__).with_name('city_v1_seed42.json').read_text())
     assert reference_run['metrics']==expected
     assert reference_run['rule_telemetry']=={}
-    assert reference_run['metrics']['active_services']==82
+    # Citywide demand now reaches every service, including the selected Caltrain corridor.
+    assert reference_run['metrics']['active_services']==83
 
 
 @pytest.mark.parametrize('patch',[

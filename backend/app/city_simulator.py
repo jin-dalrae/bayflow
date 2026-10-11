@@ -16,6 +16,7 @@ from .city_scenarios import get_city_scenario, active_profile_events
 
 CITY_EVALUATOR = {
     "version": "city-intent-v2",
+    "demand_model": "citywide-27-neighborhoods-9-centers",
     "boarding_within_10": 0.35,
     "arrival_within_eta_10": 0.35,
     "crowding_exposure": 0.20,

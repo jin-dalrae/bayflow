@@ -231,83 +231,119 @@ def get_city_network(horizon_minutes=180):
 
 CLUSTERS = [
     ("Richmond", 37.780, -122.478),
+    ("Outer Richmond", 37.777, -122.495),
     ("Sunset", 37.754, -122.490),
+    ("Inner Sunset", 37.762, -122.466),
     ("Parkside", 37.739, -122.482),
+    ("Lakeshore", 37.725, -122.488),
     ("Excelsior", 37.723, -122.435),
+    ("Ingleside", 37.722, -122.455),
     ("Bayview", 37.733, -122.390),
     ("Visitacion Valley", 37.714, -122.410),
+    ("Portola", 37.727, -122.405),
     ("Mission", 37.752, -122.418),
     ("Noe Valley", 37.750, -122.433),
+    ("Castro", 37.761, -122.435),
     ("Marina", 37.801, -122.439),
+    ("Pacific Heights", 37.792, -122.435),
     ("Haight", 37.770, -122.447),
+    ("Western Addition", 37.781, -122.433),
+    ("Hayes Valley", 37.776, -122.424),
+    ("North Beach", 37.800, -122.410),
+    ("Chinatown", 37.795, -122.407),
+    ("Potrero Hill", 37.759, -122.400),
+    ("Dogpatch", 37.758, -122.389),
     ("Bernal Heights", 37.739, -122.416),
     ("Glen Park", 37.733, -122.433),
     ("Oakland", 37.804, -122.271),
     ("Daly City", 37.706, -122.469),
 ]
 
+# Synthetic job/activity centers. Several stops per center spread arrivals across the network.
+DESTINATIONS = [
+    ("Financial District", 37.793, -122.398),
+    ("Union Square", 37.788, -122.407),
+    ("Civic Center", 37.779, -122.414),
+    ("SoMa", 37.784, -122.401),
+    ("Mission Bay", 37.770, -122.391),
+    ("Embarcadero", 37.795, -122.394),
+    ("UCSF Parnassus", 37.763, -122.458),
+    ("SF State", 37.722, -122.478),
+    ("Downtown Oakland", 37.803, -122.271),
+]
+
+
+def _largest_strongly_connected(nodes, edges):
+    """Stops reachable from and back to each other, so every commute can return."""
+    forward, backward = defaultdict(list), defaultdict(list)
+    for edge in edges:
+        forward[edge["source"]].append(edge["target"])
+        backward[edge["target"]].append(edge["source"])
+    order, seen = [], set()
+    for start in sorted(nodes):
+        if start in seen:
+            continue
+        seen.add(start)
+        stack = [(start, iter(forward[start]))]
+        while stack:
+            node, children = stack[-1]
+            child = next((c for c in children if c not in seen), None)
+            if child is None:
+                stack.pop()
+                order.append(node)
+            else:
+                seen.add(child)
+                stack.append((child, iter(forward[child])))
+    assigned, best = set(), set()
+    for start in reversed(order):
+        if start in assigned:
+            continue
+        component, pending = set(), [start]
+        assigned.add(start)
+        while pending:
+            node = pending.pop()
+            component.add(node)
+            for parent in backward[node]:
+                if parent not in assigned:
+                    assigned.add(parent)
+                    pending.append(parent)
+        if len(component) > len(best):
+            best = component
+    return best
+
+
+def _spread_stops(candidates, lat, lon, count, spacing_m, pool):
+    """Nearest connected stops to a point, at least spacing_m apart."""
+    point = {"lat": lat, "lon": lon}
+    chosen = []
+    for node in sorted(candidates, key=lambda n: distance_meters(n, point))[:pool]:
+        if all(distance_meters(node, other) >= spacing_m for other in chosen):
+            chosen.append(node)
+        if len(chosen) == count:
+            break
+    return chosen
+
 
 @lru_cache(maxsize=1)
 def get_city_demand_pairs():
-    """Connected neighborhood↔downtown OD samples; demand weights are synthetic."""
+    """Neighborhood↔job-center OD samples over many stops; demand weights are synthetic."""
     network = get_city_network()
     nodes = {node["id"]: node for node in network["nodes"]}
-    adjacency = defaultdict(list)
-    for edge in network["edges"]:
-        adjacency[edge["source"]].append(
-            (
-                edge["target"],
-                edge["travel_minutes"]
-                + (0 if edge["operator"] == "walk" else edge["headway_minutes"] / 2),
-            )
-        )
-    destination_points = [
-        ("Financial District", 37.793, -122.398),
-        ("Civic Center", 37.779, -122.414),
-        ("Mission Bay", 37.770, -122.391),
-    ]
-    destinations = []
-    for name, lat, lon in destination_points:
-        candidates = sorted(
-            (node for node in nodes.values() if node["id"] in adjacency),
-            key=lambda node: distance_meters(node, {"lat": lat, "lon": lon}),
-        )[:10]
-        destinations.append((name, candidates))
-
-    def reachable(origin):
-        visited = set()
-        pending = [origin]
-        while pending:
-            node = pending.pop()
-            if node in visited:
-                continue
-            visited.add(node)
-            pending.extend(
-                target for target, _ in adjacency[node] if target not in visited
-            )
-        return visited
-
+    connected = _largest_strongly_connected(nodes, network["edges"])
+    candidates = [nodes[node_id] for node_id in sorted(connected)]
+    centers = [(name, _spread_stops(candidates, lat, lon, 4, 150, 40)) for name, lat, lon in DESTINATIONS]
     results = []
-    for cluster, lat, lon in CLUSTERS:
-        candidates = sorted(
-            (node for node in nodes.values() if node["id"] in adjacency),
-            key=lambda node: distance_meters(node, {"lat": lat, "lon": lon}),
-        )[:12]
-        for downtown, targets in destinations:
-            selected = None
-            for origin in candidates:
-                connected = reachable(origin["id"])
-                for destination in targets:
-                    if destination["id"] in connected and origin["id"] in reachable(
-                        destination["id"]
-                    ):
-                        selected = (origin, destination)
-                        break
-                if selected:
-                    break
-            if not selected:
+    for cluster_index, (cluster, lat, lon) in enumerate(CLUSTERS):
+        homes = _spread_stops(candidates, lat, lon, 4, 250, 60)
+        if not homes:
+            continue
+        for center_index, (downtown, targets) in enumerate(centers):
+            if not targets:
                 continue
-            origin, destination = selected
+            origin = homes[center_index % len(homes)]
+            destination = targets[cluster_index % len(targets)]
+            if origin["id"] == destination["id"]:
+                continue
             for source, target, direction in [
                 (origin, destination, "inbound"),
                 (destination, origin, "outbound"),
@@ -322,7 +358,7 @@ def get_city_demand_pairs():
                         weight=1,
                         origin_name=source["name"],
                         destination_name=target["name"],
-                        provenance="Synthetic residential commute OD mapped to geographically nearest connected observed GTFS stops",
+                        provenance="Synthetic residential commute OD spread over several connected observed GTFS stops per neighborhood and job center",
                     )
                 )
     # Include route-local commute cohorts so every published bus/rail route can carry demand.

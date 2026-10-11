@@ -25,7 +25,7 @@ flowchart LR
     ATLAS -- promoted harness --> Operators
 ```
 
-1. **Operate.** Muni, BART and Caltrain agents dispatch limited standby vehicles, hold departures for transfers, and (when a coordinator is active) post voluntary route advice. Riders are simulated cohorts with a fixed origin, destination and expected arrival.
+1. **Operate.** Muni, BART and Caltrain agents dispatch limited standby vehicles, hold departures for transfers, and (when a coordinator is active) post voluntary route advice. Riders are simulated cohorts with a fixed origin, destination and expected arrival, commuting between 27 neighborhoods (108 home stops) and 9 job centers (36 work stops), plus route-local trips on every published line.
 2. **Monitor.** Every 15 simulated minutes the service monitor checks whether riders boarded within 10 minutes (target 80%) and how many wait in crowded queues. Two misses in a row trigger a review; otherwise the harness is kept.
 3. **Propose.** The planner reads the failing traces and past lessons, then changes the harness configuration: which agents and tools run, what context they share, how often they replan, bounded policy parameters, and up to 12 typed operating rules. It never writes code.
 4. **Validate and evaluate.** The candidate must pass a Pydantic safety envelope, then race the current version on five held-out seeds plus a control scenario.
@@ -49,10 +49,11 @@ Walking is not boarding, unserved riders count as missed, and accepting advice n
 
 ## Results so far
 
-- **City Commute (current experiment):** the monitor consistently triggers (for example, 59% of matured riders boarded within 10 minutes at 4:45 PM). Candidates adding a regional coordinator, transfer holds or faster replanning have all been rejected; the best won 4 of 5 held-out days but improved only 1.2%, under the 2% gate. **v1 remains active; no city improvement is claimed.**
+- **City Commute, citywide demand (current):** v1 boards 68% of riders within 10 minutes on seed 42 (objective 0.231). The first Gemini candidate on this demand was rejected (0 of 5 days, −5.3%). **v1 remains active; no city improvement is claimed.**
+- **City Commute, earlier concentrated demand:** all commuter trips ended at three downtown stops, creating bottlenecks (59% boarded within 10 minutes). Candidates were all rejected, the best at 4 of 5 days and +1.2%. The demo video was recorded on this earlier demand; records carry `evaluator.demand_model` to tell the two apart.
 - **Event Surge (earlier compact scenario):** a real Gemini-plus-Atlas run promoted model-generated v4 with a 22.23% lower mean objective; a later fallback proposal regressed 14.26% and was rejected. Evidence: [demo/evaluation-gemini-atlas.json](demo/evaluation-gemini-atlas.json).
 
-Read each decision's `planner.kind` before attributing it to a model: when the model call fails or returns invalid output, the run uses the clearly labeled rule-based fallback.
+Read each decision's `planner.kind` before attributing it to a model: when the model call fails or returns invalid output, the run uses the clearly labeled rule-based fallback. Between the typed-rules change and October 11, Gemini rejected the proposal schema (`maxItems`), so those city proposals are rule-based; this is now fixed.
 
 ## MongoDB Atlas
 
@@ -88,7 +89,7 @@ npx playwright test -c playwright.city.config.ts     # browser checks on fresh i
 
 ## Data and limitations
 
-Geography comes from official Muni and BART GTFS feeds (3,292 nodes, 8,369 directed edges; feeds valid through late August 2026) and OpenStreetMap; see [attribution](frontend/public/data/ATTRIBUTION.md). Rider demand, disruptions, capacities and costs are synthetic. This is a simplified one-minute interval simulator, not a calibrated digital twin: it does not model full vehicle blocks, signaling, traffic or accessibility, and it controls no real equipment. Short held-out suites cannot establish broad generalization.
+Geography comes from official Muni and BART GTFS feeds (3,292 nodes, 8,369 directed edges; feeds valid through late August 2026) and OpenStreetMap; see [attribution](frontend/public/data/ATTRIBUTION.md). Rider demand, disruptions, capacities and costs are synthetic; demand touches about 12% of stops, so many quiet stops never see riders. This is a simplified one-minute interval simulator, not a calibrated digital twin: it does not model full vehicle blocks, signaling, traffic or accessibility, and it controls no real equipment. Short held-out suites cannot establish broad generalization.
 
 ## More
 
