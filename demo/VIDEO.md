@@ -2,7 +2,9 @@
 
 Only record after the real backend evaluation finishes and the Atlas indicator confirms read/write. Use the displayed measured values; do not substitute target improvements. If a mutation is rejected, show the rejection and explain its gate.
 
-The public repository is <https://github.com/jin-dalrae/bayflow>. No video has been recorded or uploaded yet. Atlas is still unverified from the restricted build environment; run `bash scripts/start.sh` in a network-enabled terminal before recording. The preserved offline results in `demo/evaluation-offline.json` demonstrate a rejected v2 followed by promoted v3, but are not Atlas persistence evidence.
+The public repository is <https://github.com/jin-dalrae/bayflow>. No video has been recorded or uploaded yet. Actual official Atlas integration and a persisted evolution run passed; inspect `demo/evaluation-atlas.json` and recheck the live indicator before recording. The separate `demo/evaluation-offline.json` remains an explicitly labeled reproducibility artifact.
+
+`demo/evaluation-gemini-atlas.json` provides the strongest completed proof: real Gemini generated and promoted v4, while the second invalid model response triggered a labeled fallback whose v5 was rejected. Show the actual planner labels. The champion's seed-42 objective improved 21.33%, at operating cost 810 → 990; the mean promotion-suite improvement was 22.23%.
 
 | Time | Screen | Exact narration |
 | --- | --- | --- |

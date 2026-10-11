@@ -2,7 +2,11 @@
 
 **Why is this recursive harnessing?** Ordinary dispatch actions change resource allocation within an architecture. BayFlow separately changes the architecture's validated configuration: active agents/tools, coordination mode, context policy, planning horizon, replanning interval, memory window, verification, and optimization strategy. It reruns the candidate and independently decides whether to promote it. Inspect a proposal, its configuration diff, and matching evaluation records.
 
-**What does the LLM decide?** When configured and reachable, Anthropic receives the current configuration and measured failure summary and proposes a bounded configuration mutation with rationale. It does not calculate passenger movement or fitness. When unavailable, the visibly labeled rule-based planner chooses changes from observed failures. No generated Python is executed.
+**What does the LLM decide?** When configured and reachable, Gemini or Anthropic receives the current configuration, measured development failures, and proposal outcome history, then proposes a bounded configuration mutation with rationale. Gemini returns structured JSON through Google's official SDK; Pydantic validates it. The model does not calculate passenger movement or fitness. When unavailable, the visibly labeled rule-based planner chooses changes from observed failures. No generated Python is executed. The preserved demonstration evaluation artifacts used the rule-based planner; provider configuration alone does not establish a successful model call.
+
+The real Gemini 3.8 Flash proposal integration test passed. `demo/model-verification.json` contains its actual validated candidate and model/token metadata. This verifies model generation independently from the rule-based measured comparison artifacts; it does not by itself establish that the model candidate improved performance.
+
+The subsequent live Gemini-plus-Atlas run also completed: its model-generated v4 was promoted after a 22.23% reduction in mean promotion-suite objective, and its persisted proposal/evaluation decision was retrieved from Atlas through the API. On iteration two, the model response failed Pydantic validation; the visibly labeled rule-based fallback proposed v5, which worsened the objective 14.26% and was rejected. `demo/evaluation-gemini-atlas.json` preserves this complete model-driven cycle and honest fallback/rejection history. It does not show two valid LLM-generated proposals.
 
 **What is deterministic?** Seeded demand, the interval simulator, queues, paths, capacity limits, disruptions, operational policy execution, metric calculations, and promotion gates. Model proposals can vary; stored configurations make their simulations reproducible.
 
@@ -14,7 +18,7 @@ In the preserved rule-based offline run, v2 was rejected and v3 was promoted. On
 
 **Why MongoDB?** Atlas is the system of record linking scenarios, traces, proposal inputs, complete candidate versions, evaluation results, and deployment decisions. Version history and rollback require this state; the UI reports real database health. Explicit offline preview is development-only and does not satisfy the hackathon requirement.
 
-Atlas integration code exists, but official Sandbox ping/read/write remains unverified from the restricted build environment. The participant must run the provided launcher/verification command on a network-enabled machine; no successful Atlas claim is made for the offline artifact.
+The real official Sandbox integration check passed, as did a live persisted recursive run. `demo/evaluation-atlas.json` contains actual Atlas-backed identifiers, measured results, and verification. Persisted proposal/configuration/evaluation joins remain inspectable after browser reload. The separate offline artifact is still labeled correctly and is not Atlas evidence.
 
 **How realistic is the simulator?** Real Bay Area places and transfers anchor a deliberately simplified corridor model. Demand, events, headways, travel times, fleet budgets, and capacities are synthetic. Vehicles are segment departure/capacity abstractions, not a complete physical fleet blocking model. These findings are experimental, not operational transit advice.
 

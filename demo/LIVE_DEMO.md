@@ -2,7 +2,7 @@
 
 Before presenting: start both servers, verify `/database/status`, run an evaluation once to check credentials and latency, and keep the resulting version history available. Do not erase rejected candidates: they demonstrate a functioning gate. Identify the scenario as synthetic.
 
-Start with `bash scripts/start.sh`; it verifies Atlas before serving the interface at `http://127.0.0.1:5175`. If this fails, run `.venv/bin/python scripts/verify_atlas.py` in a network-enabled terminal and resolve the official Sandbox access. As of the restricted build, real Atlas persistence remains unverified. The public code is at <https://github.com/jin-dalrae/bayflow>.
+Start with `bash scripts/start.sh`; it verifies Atlas before serving the interface at `http://127.0.0.1:5175`. Official Sandbox read/write and a persisted evolution run have passed; actual evidence is in `demo/evaluation-atlas.json`. Recheck live status before presenting. If verification fails, the interface still starts but official operations remain blocked; run `.venv/bin/python scripts/verify_atlas.py` and resolve access. The public code is at <https://github.com/jin-dalrae/bayflow>.
 
 **0:00–0:25 — The problem.** “Bay Area transit agencies operate interconnected services, but optimizing individual systems can create bottlenecks elsewhere.” Show the selected corridor and operator colors. Explain that the map is a compact model of real geography, not live vehicle positions.
 
@@ -10,11 +10,13 @@ Start with `bash scripts/start.sh`; it verifies Atlas before serving the interfa
 
 **0:55–1:20 — The failure.** Display actual measured delay and transfer failures. “These operational agents can dispatch resources, but their architecture initially limits information sharing and planning.” Show v1's active agents, tools, and context policy.
 
-**1:20–2:15 — Recursive evolution.** Click **Evolve Harness**. Show backend progress, diagnosis, proposed configuration diff, validation, and matched-seed evaluation. “This is an architecture mutation. It changes how the agents observe, coordinate, and plan, and then reruns their executable behavior.” State whether the planner is Anthropic or the rule-based fallback. Do not describe the fallback as an LLM.
+**1:20–2:15 — Recursive evolution.** Click **Evolve Harness**. Show backend progress, diagnosis, proposed configuration diff, validation, and matched-seed evaluation. “This is an architecture mutation. It changes how the agents observe, coordinate, and plan, and then reruns their executable behavior.” State whether the proposal actually used Gemini, Anthropic, or the rule-based fallback. Do not describe the fallback as an LLM. Refresh the inspector to show its persisted audit history.
 
 **2:15–2:45 — Results.** Show the three modes: static timetable, fixed agents, and evolved harness. Read the actual percentage and cost tradeoff from the result. If rejected, explain that its improvement or safety gate failed and the previous architecture remains active. Show replay and version history.
 
 The recorded offline seed-42 example rejects v2, then promotes v3: objective 0.305224 → 0.240118, a 21.33% improvement, with cost 810 → 990. Treat these as an offline reproducibility example, not a prediction for the live run. Transfer failures were unchanged and boarding denials increased; acknowledge the tradeoff if asked. The promotion suite is reused across iterations, so this does not prove independent statistical generalization.
+
+For the strongest actual model demonstration, inspect `demo/evaluation-gemini-atlas.json`: real Gemini generated v4, which was promoted with 22.23% mean promotion-suite improvement. The second model response failed schema validation; the labeled rule-based fallback proposed v5, and evaluation rejected it. The retained v4 champion has the same seed-42 comparison above. Show each proposal's actual planner label and persisted readback rather than calling both iterations LLM-generated.
 
 **2:45–3:00 — Technical proof.** Open the actual `mutation_proposals`, `evaluation_results`, and `harness_versions` records in Atlas. Show matching identifiers. “BayFlow doesn't just optimize transit. It learns how to optimize.”
 

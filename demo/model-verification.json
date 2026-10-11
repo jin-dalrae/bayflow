@@ -1,0 +1,41 @@
+{
+  "proposal": {
+    "diagnosis": "The v1 decentralized architecture failed primarily due to myopic and isolated decision-making: agents relied on a 'local_only' context policy and 'local_greedy' optimization without foresight or cross-agency communication. During major surge events (Chase Center at minute 315, Oracle Park at minutes 330-360), Muni experienced extreme queue buildup on Townsend-Mission Bus (peaking above 800 passengers) while Caltrain and BART downstream corridors experienced surging queues (e.g., sf_caltrain-22nd reaching 549 passengers). Because agents lacked visibility into upstream surge egress and transfer cascades, 1,218 passengers were left unserved and total passenger delay reached 76,335 minutes. Furthermore, a 15-minute replanning cadence combined with a 30-minute horizon left Muni unable to preemptively position its 3 standby vehicles before queues overwhelmed corridor capacity.",
+    "rationale": "To remedy regional coordination bottlenecks and demand shocks, the harness is shifted to a 'regional' coordination mode incorporating 'regional_coordinator' and 'demand_forecaster' alongside the modal agents. The toolchain is expanded to include 'demand_forecast' for early surge anticipation, 'transfer_optimizer' for synchronizing connection windows between Muni, BART, and Caltrain, 'regional_coordination' for multi-agency vehicle positioning, and 'feasibility_checker' under 'strict' verification to ensure Muni standby bounds (3 vehicles) are strictly respected. Context is upgraded to 'regional_shared' and optimization to 'regional_predictive' over an extended 60-minute planning horizon with a 10-minute replanning interval and 12-step memory window, allowing agents to anticipate multi-station passenger cascades rather than reacting post-congestion.",
+    "expected_improvement": "If the hypothesis holds that event-driven queue shocks propagate across agency transfer nodes, regional predictive coordination and shared cross-agency context will reduce unserved passengers and cut max station queues by preemptively dispatching Muni standby shuttles and coordinating intermodal transfer arrivals.",
+    "confidence": 0.88,
+    "candidate": {
+      "version": "v2",
+      "coordination_mode": "regional",
+      "active_agents": [
+        "bart_agent",
+        "caltrain_agent",
+        "demand_forecaster",
+        "muni_agent",
+        "regional_coordinator"
+      ],
+      "active_tools": [
+        "demand_forecast",
+        "feasibility_checker",
+        "local_dispatch_optimizer",
+        "regional_coordination",
+        "transfer_optimizer"
+      ],
+      "planning_horizon_minutes": 60,
+      "replanning_interval_minutes": 10,
+      "context_policy": "regional_shared",
+      "memory_window_steps": 12,
+      "verification_policy": "strict",
+      "optimization_strategy": "regional_predictive"
+    }
+  },
+  "planner": {
+    "kind": "llm",
+    "provider": "gemini",
+    "model": "gemini-3.8-flash",
+    "requested_model": "gemini-3.8-flash",
+    "input_tokens": 8852,
+    "output_tokens": 659,
+    "thinking_tokens": 1566
+  }
+}

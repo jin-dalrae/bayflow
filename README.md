@@ -22,7 +22,11 @@ npm install
 cd ..
 ```
 
-Set `MONGODB_URI` to the official Sandbox connection string. `MONGODB_DB` defaults to `bayflow`. Optional `ANTHROPIC_API_KEY` enables the model mutation planner; otherwise the backend uses a labeled rule-based fallback. `ANTHROPIC_MODEL` selects the configured model. `TRANSIT_511_API_KEY` is only needed for the optional GTFS importer.
+Set `MONGODB_URI` to the official Sandbox connection string. `MONGODB_DB` defaults to `bayflow`. The model planner supports Gemini through Google's official `google-genai` SDK and Anthropic through its official SDK. The default configuration is `LLM_PROVIDER=gemini`, `GEMINI_API_KEY`, and `GEMINI_MODEL=gemini-3.8-flash`; `GOOGLE_API_KEY` is accepted as an alias. For Anthropic, set `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`. A missing key, provider failure, or invalid response triggers the visibly labeled rule-based planner, with its actual fallback reason recorded. `TRANSIT_511_API_KEY` is only needed for the optional GTFS importer.
+
+Gemini generation uses JSON Schema structured output, followed by application validation; see [Google's structured-output documentation](https://ai.google.dev/gemini-api/docs/generate-content/structured-output). A **real Gemini 3.8 Flash proposal call passed** the opt-in model test and produced a validated candidate. [Its preserved artifact](demo/model-verification.json) records `planner.kind=llm`, provider/model, 8,852 input tokens, 659 output tokens, and 1,566 thinking tokens. This proves model-driven proposal generation; candidate improvement still requires a separate measured simulation evaluation. The optional Anthropic credential encountered an insufficient-credit error during verification, so it is not used as evidence of successful model planning.
+
+A subsequent **real Gemini-plus-Atlas evolution run** proposed and promoted v4 with **22.23% lower mean promotion-suite objective**. Its proposal metadata confirms Gemini `gemini-3.8-flash`; the decision and before/after evaluations were read back through the persisted proposal-history endpoint. On iteration two, Gemini's response failed strict Pydantic validation, so the explicitly labeled rule-based fallback proposed v5. Its objective worsened **14.26%**, and the gate rejected it, retaining v4. [The complete actual artifact](demo/evaluation-gemini-atlas.json) includes job history/results, persisted proposal readback, and verified database state. This establishes model-driven mutation, executable candidate evaluation, automatic promotion/rejection, schema enforcement, and actual Sandbox auditability together; it does not claim two valid LLM proposals.
 
 After configuring `.env`, the single launcher verifies actual Atlas ping/read/write, seeds the database, and starts both services:
 
@@ -30,13 +34,13 @@ After configuring `.env`, the single launcher verifies actual Atlas ping/read/wr
 bash scripts/start.sh
 ```
 
-The launcher serves the interface at <http://127.0.0.1:5175> and the API at <http://127.0.0.1:8000>. It stops if Atlas verification fails. To verify database access separately:
+The launcher serves the interface at <http://127.0.0.1:5175> and the API at <http://127.0.0.1:8000>. If Atlas verification fails, it still starts the interface, but official operations remain blocked until access works; offline preview requires explicit selection. To verify database access separately:
 
 ```bash
 .venv/bin/python scripts/verify_atlas.py
 ```
 
-**Current verification limit:** Atlas persistence has not yet been verified from the restricted build environment because Sandbox DNS/network access is blocked. The participant must run the verification/launcher in a network-enabled local terminal. The offline results below establish simulation and harness execution, not official Sandbox eligibility.
+**Verified Atlas integration:** The official Sandbox ping/read/write and live recursive evaluation have passed. [The actual Atlas evaluation artifact](demo/evaluation-atlas.json) records `persistence=atlas`, measured decisions, matching run identifiers, and database verification. A live snapshot contained 21 runs, 1,785 frames, 5,516 traces, three versions, two proposals, two evaluations, and two deployment decisions; these counts grow with further runs. Recheck database status before presenting.
 
 Manual launch, if preferred:
 
@@ -50,10 +54,10 @@ In another terminal:
 
 ```bash
 cd frontend
-npm run dev -- --port 5173
+npm run dev -- --port 5175
 ```
 
-Open <http://127.0.0.1:5173>. API documentation is at <http://127.0.0.1:8000/docs>. Check `/database/status` before presenting: a successful connection alone is insufficient; the backend must also confirm a real write/read round trip.
+Open <http://127.0.0.1:5175>. API documentation is at <http://127.0.0.1:8000/docs>. Check `/database/status` before presenting: a successful connection alone is insufficient; the backend must also confirm a real write/read round trip.
 
 For an explicitly noneligible development preview, set `BAYFLOW_OFFLINE=1`. Offline state is not Atlas persistence and cannot meet the competition acceptance criteria. Return to `BAYFLOW_OFFLINE=0` with the official URI before the hackathon demo.
 
@@ -64,7 +68,7 @@ flowchart LR
     UI[React transit replay / harness inspector] --> API[FastAPI jobs and history]
     API --> SIM[Seeded deterministic transit simulator]
     SIM --> TRACES[Metrics and failure traces]
-    TRACES --> PLANNER[Anthropic planner / labeled rules fallback]
+    TRACES --> PLANNER[Gemini / Anthropic planner / labeled rules fallback]
     PLANNER --> SCHEMA[Pydantic harness safety envelope]
     SCHEMA --> CANDIDATE[Candidate architecture]
     CANDIDATE --> SIM
@@ -121,6 +125,8 @@ Use the official PyMongo driver. The backend creates collection indexes and pers
 
 In Atlas Data Explorer, select the configured database and inspect `simulation_runs`, `agent_traces`, `harness_versions`, `mutation_proposals`, and `evaluation_results`. Match run/version/proposal identifiers from the UI. Refresh after an evolution and verify new documents and the active-version decision. Never show a URI, `.env`, or token on screen.
 
+`GET /harness/proposals` joins persisted proposals with candidate configurations and before/after evaluation history. The inspector can reload this audit trail after a browser refresh instead of depending on the last in-memory job result.
+
 ## Evaluation and reproducibility
 
 The three comparison modes are static timetable (no intelligent intervention), fixed agents (operational actions with unchanged v1), and recursive harness (operational actions plus evaluated architecture mutations). Matching seeds and a fixed objective distinguish ordinary operational improvement from recursive improvement.
@@ -141,13 +147,21 @@ J = 0.50 × (average passenger delay / 30 minutes)
 
 Congestion, queue peaks, wait time, occupancy violations, feasibility, and served/queued/onboard accounting are reported alongside the objective. Operating costs are synthetic scenario units, not quoted agency budgets. Evaluator `objective-v1` and its weights are stored with runs and cannot be changed by a harness proposal.
 
-Run tests and build the frontend:
+Run isolated tests, opt-in integration checks, and the frontend build:
 
 ```bash
-.venv/bin/python -m pytest -q
+npm test -- -q
+# Real official Sandbox integration; requires its configured URI.
+npm test -- --atlas -q
+# Real configured model call; requires an available provider/model and key.
+npm test -- --llm -q
+# Both external integration checks.
+npm test -- --atlas --llm -q
 cd frontend
 npm run build
 ```
+
+The standard suite passes 22 isolated tests and skips the two opt-in checks. The actual Atlas integration check also passed. `npm test -- --llm -q` passed 23 tests with the Atlas check skipped, including a real Gemini 3.8 Flash request and parsed validated proposal. Two live browser checks passed, including real Atlas baseline write/read and traces from all three operator controllers. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a successful model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
 
 Run the entire recursive loop without a browser (official Sandbox required):
 
@@ -174,6 +188,7 @@ The CLI prints real stage updates to stderr and measured results to stdout. `--o
 | `GET /harness/current` / `GET /harness/versions` | Active configuration and version history |
 | `POST /harness/evolve` | Enqueue candidate planning and independent evaluations |
 | `GET /harness/evaluations` | Persisted evaluation/gate results |
+| `GET /harness/proposals` | Persisted proposal/configuration/evaluation audit history |
 | `POST /harness/rollback` | Activate a prior accepted version and audit the decision |
 | `GET /database/status` | Ping/read-write status and collection counts |
 
@@ -209,7 +224,9 @@ Long-running operations return HTTP 202 with a job ID. Polling `/jobs` reflects 
 | Missed-transfer rate | 0.00354 | 0.00354 | 0.00354 |
 | Repeated capacity denials | 7,156 | 4,681 | 6,334 |
 
-All modes generated the same **5,045** passengers. The evolved seed-42 objective is **21.33% lower** than fixed agents, at **22.22% higher additional operating cost**. Some metrics did not improve: transfer failures were unchanged and repeated boarding denials increased. These measured tradeoffs are preserved rather than hidden. Promotion uses the mean matched held-out suite, not this single demonstration percentage. Eleven backend tests and the frontend build passed during development; offline tests cannot verify Atlas connectivity. Future runs, model proposals, and persisted starting versions may produce different results.
+All modes generated the same **5,045** passengers. The evolved seed-42 objective is **21.33% lower** than fixed agents, at **22.22% higher additional operating cost**. Some metrics did not improve: transfer failures were unchanged and repeated boarding denials increased. These measured tradeoffs are preserved rather than hidden. Promotion uses the mean matched held-out suite, not this single demonstration percentage. The [Atlas-backed run](demo/evaluation-atlas.json) reproduced this three-way comparison and persisted its proposals, evaluations, and decisions. Both preserved evaluation artifacts used the rule-based planner. Future runs, model proposals, and persisted starting versions may produce different results.
+
+The later [Gemini-plus-Atlas run](demo/evaluation-gemini-atlas.json) retained model-generated champion v4 and reproduced the same seed-42 comparison shown above. Its first mutation used the real LLM and was promoted; its second iteration used the labeled fallback after an invalid model response and was rejected. Read each decision's planner metadata rather than assigning one provider label to the whole run.
 
 ## Limitations
 
@@ -219,7 +236,7 @@ This is a simplified interval simulator, not a calibrated transport digital twin
 
 Use [the three-minute live script](demo/LIVE_DEMO.md), [one-minute video plan](demo/VIDEO.md), [judge FAQ](demo/JUDGE_FAQ.md), and [submission evidence checklist](demo/SUBMISSION.md). Main flow: run baseline → inspect failure → evolve harness → inspect evaluated diff and acceptance/rejection → replay → inspect Atlas records.
 
-The [public repository](https://github.com/jin-dalrae/bayflow) has been created. A submission video has not been recorded or uploaded; the included video file is a recording script. Atlas verification and the participant's submission form remain required before the 5:00 PM Pacific deadline.
+The [public repository](https://github.com/jin-dalrae/bayflow) has been created and official Sandbox persistence has been verified. A submission video has not been recorded or uploaded; the included video file is a recording script. Video recording/upload and the participant's submission form remain required before the 5:00 PM Pacific deadline.
 
 ## What We Built During the Hackathon
 

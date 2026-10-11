@@ -1,0 +1,9 @@
+{
+  "name": "bayflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recursive multi-agent transit harness acceptance tests",
+  "scripts": {
+    "test": ".venv/bin/python -m pytest tests"
+  }
+}
