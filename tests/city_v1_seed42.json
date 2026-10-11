@@ -16,7 +16,7 @@
   "service_holds": 0,
   "generated_passengers": 9741,
   "served_passengers": 8089,
-  "objective": 0.227687,
+  "objective": 0.225951,
   "first_boarded_passengers": 9741,
   "boarded_within_10_minutes": 6608,
   "boarding_within_10_minutes_rate": 0.67837,

@@ -57,13 +57,13 @@ Lower is better:
 J_city = 0.35 × (1 − boarding success fraction)
        + 0.35 × (1 − arrival success fraction)
        + 0.20 × exposure passenger-minutes / (generated passengers × 30)
-       + 0.10 × max(0, net additional operating cost) / 20,000
+       + 0.10 × max(0, net additional operating cost) / (generated passengers × 9)
        + 1,000 × unsafe/infeasible violations
 ```
 
 Boarding success means first bus/rail boarding within ten minutes. Arrival success means final arrival by original ETA plus ten minutes. Zero generated demand must be handled explicitly rather than dividing by zero or presenting a fictitious success rate. Cost units and queue-area sizes remain documented synthetic assumptions.
 
-The implemented `city-intent-v2` evaluator is separate from Event Surge's preserved `objective-v1`. New scope warrants a new predefined experiment; it does not justify changing the historical evaluator or relabeling its improvement. Every run stores evaluator version, weights, scenario, seed, controls, and complete harness configuration.
+The implemented `city-intent-v3` evaluator replaces v2's fixed 20,000-unit cost normalizer with a per-rider one, declared before its runs: a 90-unit standby bus run breaks even if about three more riders board within ten minutes. Under v2 every extra service run was a net loss, so no candidate could be promoted. v2 results keep their label. The evaluator is separate from Event Surge's preserved `objective-v1`. New scope warrants a new predefined experiment; it does not justify changing the historical evaluator or relabeling its improvement. Every run stores evaluator version, weights, scenario, seed, controls, and complete harness configuration.
 
 The fixed city standby pool is 12 bus, four Metro, two BART, and one Caltrain vehicle/driver pairs, with a 12,000-unit gross supplemental-service budget. These are model cost units, not dollars. An overspending early development hypothesis helped some journeys but worsened the objective; the budget was fixed before the new promotion benchmark, with scoring weights unchanged. No architecture mutation can enlarge it, relax a deadline, increase advice compliance, reduce demand, change density assumptions, or alter scoring.
 

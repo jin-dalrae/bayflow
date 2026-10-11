@@ -16,7 +16,7 @@ from .city_scenarios import get_city_scenario, active_profile_events
 
 STANDBY_RUN_MINUTES = 20
 CITY_EVALUATOR = {
-    "version": "city-intent-v2",
+    "version": "city-intent-v3",
     "demand_model": "citywide-27-neighborhoods-9-centers",
     "boarding_within_10": 0.35,
     "arrival_within_eta_10": 0.35,
@@ -27,7 +27,9 @@ CITY_EVALUATOR = {
     "eta_slack_minutes": 10,
     "crowded_density_threshold": 1.5,
     "crowding_normalization_minutes": 30,
-    "cost_normalization_units": 20000,
+    # v3: a 90-unit standby bus run breaks even if about three more riders board within
+    # ten minutes (0.10 x 90 / (riders x 9) = 0.35 x 2.86 / riders). v2 used a fixed 20,000.
+    "cost_units_per_rider": 9,
     "reference": "Initial undisrupted requested-path ETA is frozen before any advisory; unfinished requests fail arrival target.",
 }
 
@@ -1163,7 +1165,7 @@ def simulate_city(
         0.35 * (1 - board_rate)
         + 0.35 * (1 - eta_rate)
         + 0.20 * exposure / max(1, generated * 30)
-        + 0.10 * max(0, extra_cost) / 20000
+        + 0.10 * max(0, extra_cost) / max(1, generated * CITY_EVALUATOR["cost_units_per_rider"])
         + 1000 * (violations + capacity_violations)
     )
     metrics = dict(

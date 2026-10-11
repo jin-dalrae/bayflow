@@ -1,0 +1,2917 @@
+{
+  "scenario": "city_commute",
+  "current": {
+    "version": "v3",
+    "coordination_mode": "decentralized",
+    "active_agents": [
+      "muni_agent",
+      "bart_agent",
+      "caltrain_agent"
+    ],
+    "active_tools": [
+      "local_dispatch_optimizer"
+    ],
+    "planning_horizon_minutes": 30,
+    "replanning_interval_minutes": 15,
+    "context_policy": "local_only",
+    "memory_window_steps": 6,
+    "verification_policy": "basic",
+    "optimization_strategy": "local_greedy",
+    "policy": {
+      "advisory_pressure_threshold": 0.45,
+      "advisory_eta_slack_minutes": 10,
+      "dispatch_threshold_regional": 0.35,
+      "dispatch_threshold_local": 0.7,
+      "urgent_wait_minutes": 7,
+      "upstream_lookahead_minutes": 15,
+      "upstream_weight": 0.5,
+      "age_weight": 0.1,
+      "persistence_weight": 0.002,
+      "hold_load_fraction": 0.05
+    },
+    "rules": []
+  },
+  "initial": {
+    "version": "v1",
+    "coordination_mode": "decentralized",
+    "active_agents": [
+      "muni_agent",
+      "bart_agent",
+      "caltrain_agent"
+    ],
+    "active_tools": [
+      "local_dispatch_optimizer"
+    ],
+    "planning_horizon_minutes": 30,
+    "replanning_interval_minutes": 15,
+    "context_policy": "local_only",
+    "memory_window_steps": 6,
+    "verification_policy": "basic",
+    "optimization_strategy": "local_greedy",
+    "policy": {
+      "advisory_pressure_threshold": 0.45,
+      "advisory_eta_slack_minutes": 10,
+      "dispatch_threshold_regional": 0.35,
+      "dispatch_threshold_local": 1.2,
+      "urgent_wait_minutes": 7,
+      "upstream_lookahead_minutes": 15,
+      "upstream_weight": 0.5,
+      "age_weight": 0.1,
+      "persistence_weight": 0.002,
+      "hold_load_fraction": 0.05
+    },
+    "rules": []
+  },
+  "decisions": [
+    {
+      "mutation_id": "70eb37ec-38b9-476b-aba3-3138e61cd83d",
+      "proposal": {
+        "diagnosis": "All 49 missed transfers and denied transfer boardings in the baseline run were concentrated entirely on Muni Bus lines (specifically on Muni 6 with 30 denied transfers, Muni 5 with 14, and Muni 57 with 5). Under local_only context policy and without transfer optimization tools or hold rules, connecting buses departed just minutes before incoming transfer passengers could board (e.g., denied transfer boardings occurred after only 4-6 minutes of wait time). Zero service holds occurred, leaving connecting riders stranded and driving up overall passenger delay.",
+        "rationale": "To protect connection windows without excessive schedule disruption, we introduce a declarative transfer hold rule targeting Muni Bus, scoped to trigger when at least 2 incoming transfer riders are detected, bounding the maximum vehicle hold to 3 minutes. In accordance with harness requirements, incoming_transfer_riders signals require shared context (updating context_policy from local_only to transfer_neighbors), and the hold_for_transfer action requires enabling the transfer_optimizer tool. The existing controller hold_load_fraction (0.05) preserves passenger throughput by preventing holds when vehicles are already heavily loaded.",
+        "expected_improvement": "Hypothesized reduction in Muni Bus missed transfers from 49 toward fewer than 15, lowering transfer wait times and unserved passenger counts while adding minimal delay to already-boarded passengers due to the 3-minute hold cap and hold load threshold.",
+        "confidence": 0.85,
+        "candidate": {
+          "version": "v2",
+          "coordination_mode": "decentralized",
+          "active_agents": [
+            "muni_agent",
+            "bart_agent",
+            "caltrain_agent"
+          ],
+          "active_tools": [
+            "local_dispatch_optimizer",
+            "transfer_optimizer"
+          ],
+          "planning_horizon_minutes": 30,
+          "replanning_interval_minutes": 15,
+          "context_policy": "transfer_neighbors",
+          "memory_window_steps": 6,
+          "verification_policy": "basic",
+          "optimization_strategy": "local_greedy",
+          "policy": {
+            "advisory_pressure_threshold": 0.45,
+            "advisory_eta_slack_minutes": 10,
+            "dispatch_threshold_regional": 0.35,
+            "dispatch_threshold_local": 1.2,
+            "urgent_wait_minutes": 7,
+            "upstream_lookahead_minutes": 15,
+            "upstream_weight": 0.5,
+            "age_weight": 0.1,
+            "persistence_weight": 0.002,
+            "hold_load_fraction": 0.05
+          },
+          "rules": [
+            {
+              "id": "muni_bus_transfer_hold",
+              "description": "Hold Muni Bus departures up to 3 minutes when at least 2 incoming transfer riders are detected",
+              "signal": "incoming_transfer_riders",
+              "comparator": ">=",
+              "threshold": 2.0,
+              "scope_operators": [
+                "Muni Bus"
+              ],
+              "action": "hold_for_transfer",
+              "max_hold_minutes": 3,
+              "priority": 5.0,
+              "enabled": true
+            }
+          ]
+        }
+      },
+      "candidate": {
+        "version": "v2",
+        "coordination_mode": "decentralized",
+        "active_agents": [
+          "muni_agent",
+          "bart_agent",
+          "caltrain_agent"
+        ],
+        "active_tools": [
+          "local_dispatch_optimizer",
+          "transfer_optimizer"
+        ],
+        "planning_horizon_minutes": 30,
+        "replanning_interval_minutes": 15,
+        "context_policy": "transfer_neighbors",
+        "memory_window_steps": 6,
+        "verification_policy": "basic",
+        "optimization_strategy": "local_greedy",
+        "policy": {
+          "advisory_pressure_threshold": 0.45,
+          "advisory_eta_slack_minutes": 10,
+          "dispatch_threshold_regional": 0.35,
+          "dispatch_threshold_local": 1.2,
+          "urgent_wait_minutes": 7,
+          "upstream_lookahead_minutes": 15,
+          "upstream_weight": 0.5,
+          "age_weight": 0.1,
+          "persistence_weight": 0.002,
+          "hold_load_fraction": 0.05
+        },
+        "rules": [
+          {
+            "id": "muni_bus_transfer_hold",
+            "description": "Hold Muni Bus departures up to 3 minutes when at least 2 incoming transfer riders are detected",
+            "signal": "incoming_transfer_riders",
+            "comparator": ">=",
+            "threshold": 2.0,
+            "scope_operators": [
+              "Muni Bus"
+            ],
+            "action": "hold_for_transfer",
+            "max_hold_minutes": 3,
+            "priority": 5.0,
+            "enabled": true
+          }
+        ]
+      },
+      "parent_version": "v1",
+      "planner": {
+        "kind": "llm",
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "requested_model": "gemini-3.8-flash",
+        "input_tokens": 14456,
+        "output_tokens": 749,
+        "thinking_tokens": 4264,
+        "attempts": 1,
+        "validation_errors": []
+      },
+      "development_run_id": "84046773-dadc-4a9f-93b6-21b29a118809",
+      "status": "rejected",
+      "evaluation_seeds": [
+        1043,
+        2045,
+        3043,
+        4049,
+        5051
+      ],
+      "control_seed": 5003,
+      "control_parameters": {
+        "horizon_minutes": 180
+      },
+      "benchmark_scope": "city_commute",
+      "evaluator": {
+        "version": "city-intent-v3",
+        "demand_model": "citywide-27-neighborhoods-9-centers",
+        "boarding_within_10": 0.35,
+        "arrival_within_eta_10": 0.35,
+        "crowding_exposure": 0.2,
+        "operating_cost": 0.1,
+        "unsafe_action_penalty": 1000,
+        "boarding_limit_minutes": 10,
+        "eta_slack_minutes": 10,
+        "crowded_density_threshold": 1.5,
+        "crowding_normalization_minutes": 30,
+        "cost_units_per_rider": 9,
+        "reference": "Initial undisrupted requested-path ETA is frozen before any advisory; unfinished requests fail arrival target."
+      },
+      "config_diff": [
+        {
+          "path": "active_tools",
+          "before": [
+            "local_dispatch_optimizer"
+          ],
+          "after": [
+            "local_dispatch_optimizer",
+            "transfer_optimizer"
+          ]
+        },
+        {
+          "path": "context_policy",
+          "before": "local_only",
+          "after": "transfer_neighbors"
+        },
+        {
+          "path": "rules.muni_bus_transfer_hold",
+          "before": null,
+          "after": {
+            "id": "muni_bus_transfer_hold",
+            "description": "Hold Muni Bus departures up to 3 minutes when at least 2 incoming transfer riders are detected",
+            "signal": "incoming_transfer_riders",
+            "comparator": ">=",
+            "threshold": 2.0,
+            "scope_operators": [
+              "Muni Bus"
+            ],
+            "action": "hold_for_transfer",
+            "max_hold_minutes": 3,
+            "priority": 5.0,
+            "enabled": true
+          },
+          "operation": "add",
+          "changes": []
+        }
+      ],
+      "iteration": 1,
+      "scenario": "city_commute",
+      "automatic_trigger": null,
+      "scenario_parameters": {
+        "horizon_minutes": 180
+      },
+      "accepted": false,
+      "reason": "Rejected: held-out improvement below 2%; fewer than 3 of 5 held-out seeds improved",
+      "baseline_rule_telemetry": {},
+      "candidate_rule_telemetry": {
+        "muni_bus_transfer_hold": {
+          "action": "hold_for_transfer",
+          "evaluations": 6684,
+          "fired": 358,
+          "dispatches": 0,
+          "holds": 72,
+          "hold_minutes": 142,
+          "riders_affected": 2287
+        }
+      },
+      "before": {
+        "total_passenger_delay_minutes": 36809.4,
+        "average_passenger_delay": 3.7672,
+        "missed_transfer_rate": 0.005418,
+        "missed_transfers": 52.6,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 18.106,
+        "total_passenger_wait_minutes": 176885.0,
+        "congestion": 569.8,
+        "max_station_queue": 231.0,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1345.8,
+        "additional_operating_cost": 608.0,
+        "extra_departures": 6.6,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8424.6,
+        "objective": 0.211495,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6730.6,
+        "boarding_within_10_minutes_rate": 0.688863,
+        "eta_on_time_arrived": 7370.0,
+        "eta_within_10_minutes_rate": 0.75433,
+        "regional_density_peak": 4.712,
+        "crowding_exposure_passenger_minutes": 23333.6,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "after": {
+        "total_passenger_delay_minutes": 37582.6,
+        "average_passenger_delay": 3.8462,
+        "missed_transfer_rate": 0.005786,
+        "missed_transfers": 56.2,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 18.0836,
+        "total_passenger_wait_minutes": 176665.2,
+        "congestion": 591.4,
+        "max_station_queue": 231.0,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1342.0,
+        "additional_operating_cost": 626.0,
+        "extra_departures": 6.8,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8428.4,
+        "objective": 0.21236,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6730.6,
+        "boarding_within_10_minutes_rate": 0.688863,
+        "eta_on_time_arrived": 7354.2,
+        "eta_within_10_minutes_rate": 0.752719,
+        "regional_density_peak": 4.712,
+        "crowding_exposure_passenger_minutes": 23744.6,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "improvement_percent": -0.40899312040473995,
+      "per_seed": [
+        {
+          "seed": 1043,
+          "before": {
+            "total_passenger_delay_minutes": 36798,
+            "average_passenger_delay": 3.777,
+            "missed_transfer_rate": 0.00377,
+            "missed_transfers": 36,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 18.251,
+            "total_passenger_wait_minutes": 177804,
+            "congestion": 553,
+            "max_station_queue": 240,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1182,
+            "additional_operating_cost": 790,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8560,
+            "objective": 0.214744,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6612,
+            "boarding_within_10_minutes_rate": 0.678711,
+            "eta_on_time_arrived": 7386,
+            "eta_within_10_minutes_rate": 0.758161,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 24474,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 35926,
+            "average_passenger_delay": 3.688,
+            "missed_transfer_rate": 0.00377,
+            "missed_transfers": 36,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 18.115,
+            "total_passenger_wait_minutes": 176477,
+            "congestion": 538,
+            "max_station_queue": 240,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1154,
+            "additional_operating_cost": 790,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8588,
+            "objective": 0.212694,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6612,
+            "boarding_within_10_minutes_rate": 0.678711,
+            "eta_on_time_arrived": 7431,
+            "eta_within_10_minutes_rate": 0.76278,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 23840,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "f1badcf9-8d02-487a-813e-3cfcc840a358",
+          "after_run_id": "b755dafa-223e-4fc2-b7e4-f4c911323021",
+          "objective_delta": -0.00205,
+          "improvement_percent": 0.954625,
+          "won": true
+        },
+        {
+          "seed": 2045,
+          "before": {
+            "total_passenger_delay_minutes": 39474,
+            "average_passenger_delay": 4.026,
+            "missed_transfer_rate": 0.00581,
+            "missed_transfers": 55,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.649,
+            "total_passenger_wait_minutes": 173028,
+            "congestion": 520,
+            "max_station_queue": 259,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1308,
+            "additional_operating_cost": 540,
+            "extra_departures": 6,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8496,
+            "objective": 0.217777,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6524,
+            "boarding_within_10_minutes_rate": 0.665443,
+            "eta_on_time_arrived": 7447,
+            "eta_within_10_minutes_rate": 0.759588,
+            "regional_density_peak": 3.84,
+            "crowding_exposure_passenger_minutes": 23421,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 41827,
+            "average_passenger_delay": 4.266,
+            "missed_transfer_rate": 0.00306,
+            "missed_transfers": 29,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.76,
+            "total_passenger_wait_minutes": 174121,
+            "congestion": 558,
+            "max_station_queue": 259,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1334,
+            "additional_operating_cost": 540,
+            "extra_departures": 6,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8470,
+            "objective": 0.219694,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6524,
+            "boarding_within_10_minutes_rate": 0.665443,
+            "eta_on_time_arrived": 7420,
+            "eta_within_10_minutes_rate": 0.756834,
+            "regional_density_peak": 3.84,
+            "crowding_exposure_passenger_minutes": 24822,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "bff73825-9cf3-476a-8362-1e1e2f08b152",
+          "after_run_id": "828e4182-a8dc-45c7-85cc-8db39412b25c",
+          "objective_delta": 0.001917,
+          "improvement_percent": -0.880258,
+          "won": false
+        },
+        {
+          "seed": 3043,
+          "before": {
+            "total_passenger_delay_minutes": 33090,
+            "average_passenger_delay": 3.393,
+            "missed_transfer_rate": 0.00864,
+            "missed_transfers": 85,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.921,
+            "total_passenger_wait_minutes": 184532,
+            "congestion": 522,
+            "max_station_queue": 184,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1422,
+            "additional_operating_cost": 720,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8331,
+            "objective": 0.204487,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6818,
+            "boarding_within_10_minutes_rate": 0.699067,
+            "eta_on_time_arrived": 7414,
+            "eta_within_10_minutes_rate": 0.760176,
+            "regional_density_peak": 6.12,
+            "crowding_exposure_passenger_minutes": 21069,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 33553,
+            "average_passenger_delay": 3.44,
+            "missed_transfer_rate": 0.00956,
+            "missed_transfers": 94,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.91,
+            "total_passenger_wait_minutes": 184427,
+            "congestion": 535,
+            "max_station_queue": 184,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1400,
+            "additional_operating_cost": 720,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8353,
+            "objective": 0.205316,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6818,
+            "boarding_within_10_minutes_rate": 0.699067,
+            "eta_on_time_arrived": 7393,
+            "eta_within_10_minutes_rate": 0.758023,
+            "regional_density_peak": 6.12,
+            "crowding_exposure_passenger_minutes": 21180,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "f6152c8c-05ab-4b4f-8e15-83b296ff49c1",
+          "after_run_id": "155b9a12-a2f9-4811-a73a-985fa2cf5ce4",
+          "objective_delta": 0.000829,
+          "improvement_percent": -0.405405,
+          "won": false
+        },
+        {
+          "seed": 4049,
+          "before": {
+            "total_passenger_delay_minutes": 37970,
+            "average_passenger_delay": 3.904,
+            "missed_transfer_rate": 0.00517,
+            "missed_transfers": 52,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.402,
+            "total_passenger_wait_minutes": 178963,
+            "congestion": 891,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1288,
+            "additional_operating_cost": 630,
+            "extra_departures": 7,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8437,
+            "objective": 0.212989,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6701,
+            "boarding_within_10_minutes_rate": 0.689049,
+            "eta_on_time_arrived": 7303,
+            "eta_within_10_minutes_rate": 0.750951,
+            "regional_density_peak": 4.0,
+            "crowding_exposure_passenger_minutes": 23732,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 38721,
+            "average_passenger_delay": 3.982,
+            "missed_transfer_rate": 0.00567,
+            "missed_transfers": 57,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.423,
+            "total_passenger_wait_minutes": 179160,
+            "congestion": 917,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1292,
+            "additional_operating_cost": 720,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8433,
+            "objective": 0.214827,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6701,
+            "boarding_within_10_minutes_rate": 0.689049,
+            "eta_on_time_arrived": 7270,
+            "eta_within_10_minutes_rate": 0.747558,
+            "regional_density_peak": 4.0,
+            "crowding_exposure_passenger_minutes": 24531,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "853460e2-07c8-43aa-9316-0399b2781938",
+          "after_run_id": "11b26594-4bb5-49a4-8d43-94b19125074d",
+          "objective_delta": 0.001838,
+          "improvement_percent": -0.862955,
+          "won": false
+        },
+        {
+          "seed": 5051,
+          "before": {
+            "total_passenger_delay_minutes": 36715,
+            "average_passenger_delay": 3.736,
+            "missed_transfer_rate": 0.0037,
+            "missed_transfers": 35,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 17.307,
+            "total_passenger_wait_minutes": 170098,
+            "congestion": 363,
+            "max_station_queue": 229,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1529,
+            "additional_operating_cost": 360,
+            "extra_departures": 4,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8299,
+            "objective": 0.20748,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 6998,
+            "boarding_within_10_minutes_rate": 0.712047,
+            "eta_on_time_arrived": 7300,
+            "eta_within_10_minutes_rate": 0.742776,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 23972,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 37886,
+            "average_passenger_delay": 3.855,
+            "missed_transfer_rate": 0.00687,
+            "missed_transfers": 65,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 17.21,
+            "total_passenger_wait_minutes": 169141,
+            "congestion": 409,
+            "max_station_queue": 229,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1530,
+            "additional_operating_cost": 360,
+            "extra_departures": 4,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8298,
+            "objective": 0.209268,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 6998,
+            "boarding_within_10_minutes_rate": 0.712047,
+            "eta_on_time_arrived": 7257,
+            "eta_within_10_minutes_rate": 0.7384,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 24350,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "f7aa5e0b-4b1f-44f5-af21-40b09fece30b",
+          "after_run_id": "afbb4218-4c7c-4c2e-9add-cca62fb4c632",
+          "objective_delta": 0.001788,
+          "improvement_percent": -0.86177,
+          "won": false
+        }
+      ],
+      "seed_wins": 1,
+      "required_seed_wins": 3,
+      "before_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 36809.4,
+          "stddev": 2111.400635,
+          "min": 33090,
+          "max": 39474
+        },
+        "average_passenger_delay": {
+          "mean": 3.7672,
+          "stddev": 0.212973,
+          "min": 3.393,
+          "max": 4.026
+        },
+        "missed_transfer_rate": {
+          "mean": 0.005418,
+          "stddev": 0.001804,
+          "min": 0.0037,
+          "max": 0.00864
+        },
+        "missed_transfers": {
+          "mean": 52.6,
+          "stddev": 18.117395,
+          "min": 35,
+          "max": 85
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 18.106,
+          "stddev": 0.56923,
+          "min": 17.307,
+          "max": 18.921
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 176885.0,
+          "stddev": 4991.574341,
+          "min": 170098,
+          "max": 184532
+        },
+        "congestion": {
+          "mean": 569.8,
+          "stddev": 173.771574,
+          "min": 363,
+          "max": 891
+        },
+        "max_station_queue": {
+          "mean": 231.0,
+          "stddev": 25.385035,
+          "min": 184,
+          "max": 259
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1345.8,
+          "stddev": 119.137568,
+          "min": 1182,
+          "max": 1529
+        },
+        "additional_operating_cost": {
+          "mean": 608.0,
+          "stddev": 149.853262,
+          "min": 360,
+          "max": 790
+        },
+        "extra_departures": {
+          "mean": 6.6,
+          "stddev": 1.496663,
+          "min": 4,
+          "max": 8
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8424.6,
+          "stddev": 98.103211,
+          "min": 8299,
+          "max": 8560
+        },
+        "objective": {
+          "mean": 0.211495,
+          "stddev": 0.004847,
+          "min": 0.204487,
+          "max": 0.217777
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6730.6,
+          "stddev": 165.388754,
+          "min": 6524,
+          "max": 6998
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.688863,
+          "stddev": 0.016082,
+          "min": 0.665443,
+          "max": 0.712047
+        },
+        "eta_on_time_arrived": {
+          "mean": 7370.0,
+          "stddev": 59.177699,
+          "min": 7300,
+          "max": 7447
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.75433,
+          "stddev": 0.006654,
+          "min": 0.742776,
+          "max": 0.760176
+        },
+        "regional_density_peak": {
+          "mean": 4.712,
+          "stddev": 0.872477,
+          "min": 3.84,
+          "max": 6.12
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 23333.6,
+          "stddev": 1183.456057,
+          "min": 21069,
+          "max": 24474
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      },
+      "after_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 37582.6,
+          "stddev": 2770.737707,
+          "min": 33553,
+          "max": 41827
+        },
+        "average_passenger_delay": {
+          "mean": 3.8462,
+          "stddev": 0.277408,
+          "min": 3.44,
+          "max": 4.266
+        },
+        "missed_transfer_rate": {
+          "mean": 0.005786,
+          "stddev": 0.002321,
+          "min": 0.00306,
+          "max": 0.00956
+        },
+        "missed_transfers": {
+          "mean": 56.2,
+          "stddev": 23.042569,
+          "min": 29,
+          "max": 94
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 18.0836,
+          "stddev": 0.57741,
+          "min": 17.21,
+          "max": 18.91
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 176665.2,
+          "stddev": 5091.002353,
+          "min": 169141,
+          "max": 184427
+        },
+        "congestion": {
+          "mean": 591.4,
+          "stddev": 171.133398,
+          "min": 409,
+          "max": 917
+        },
+        "max_station_queue": {
+          "mean": 231.0,
+          "stddev": 25.385035,
+          "min": 184,
+          "max": 259
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1342.0,
+          "stddev": 123.786914,
+          "min": 1154,
+          "max": 1530
+        },
+        "additional_operating_cost": {
+          "mean": 626.0,
+          "stddev": 156.665248,
+          "min": 360,
+          "max": 790
+        },
+        "extra_departures": {
+          "mean": 6.8,
+          "stddev": 1.6,
+          "min": 4,
+          "max": 8
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8428.4,
+          "stddev": 99.913162,
+          "min": 8298,
+          "max": 8588
+        },
+        "objective": {
+          "mean": 0.21236,
+          "stddev": 0.004882,
+          "min": 0.205316,
+          "max": 0.219694
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6730.6,
+          "stddev": 165.388754,
+          "min": 6524,
+          "max": 6998
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.688863,
+          "stddev": 0.016082,
+          "min": 0.665443,
+          "max": 0.712047
+        },
+        "eta_on_time_arrived": {
+          "mean": 7354.2,
+          "stddev": 75.194149,
+          "min": 7257,
+          "max": 7431
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.752719,
+          "stddev": 0.008694,
+          "min": 0.7384,
+          "max": 0.76278
+        },
+        "regional_density_peak": {
+          "mean": 4.712,
+          "stddev": 0.872477,
+          "min": 3.84,
+          "max": 6.12
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 23744.6,
+          "stddev": 1321.514222,
+          "min": 21180,
+          "max": 24822
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      }
+    },
+    {
+      "mutation_id": "e8a80821-1c8e-4ca8-842e-5d17c83afa3f",
+      "proposal": {
+        "diagnosis": "Muni Bus experienced 636 denied boardings and 1,652 unserved passengers, driven by persistent station queues on core routes (such as 57:1 with 155 denied boardings and 15-minute wait times, and 19:1 with 56 denied boardings). Under the baseline policy, dispatch_threshold_local is set to 1.2, requiring queues to exceed 120% of standard vehicle capacity before triggering standby service. Consequently, only 5 standby dispatches occurred (costing 450 out of the 12,000 available supplemental budget) despite 12 available Muni Bus standby vehicle/driver pairs sitting idle while queues hovered between 40 and 65 riders.",
+        "rationale": "Rather than introducing multi-operator transfer holds (which failed in v2 by delaying already-boarded passengers for marginal transfer gains), the harness should address the primary failure mode: local capacity shortages on Muni Bus lines. Lowering dispatch_threshold_local from 1.2 to 0.7 enables the local_dispatch_optimizer to deploy standby vehicles earlier when local passenger queues reach 70% of route capacity, absorbing queue spikes on lines 57, 19, 15, and 6 before repeated boarding denials accumulate.",
+        "expected_improvement": "Lowering dispatch_threshold_local to 0.7 is hypothesized to increase standby dispatches within the 12-vehicle Muni Bus fleet and 12,000 cost budget, substantially reducing denied boardings from 636 and decreasing unserved passengers and total passenger delay minutes.",
+        "confidence": 0.85,
+        "candidate": {
+          "version": "v3",
+          "coordination_mode": "decentralized",
+          "active_agents": [
+            "muni_agent",
+            "bart_agent",
+            "caltrain_agent"
+          ],
+          "active_tools": [
+            "local_dispatch_optimizer"
+          ],
+          "planning_horizon_minutes": 30,
+          "replanning_interval_minutes": 15,
+          "context_policy": "local_only",
+          "memory_window_steps": 6,
+          "verification_policy": "basic",
+          "optimization_strategy": "local_greedy",
+          "policy": {
+            "advisory_pressure_threshold": 0.45,
+            "advisory_eta_slack_minutes": 10,
+            "dispatch_threshold_regional": 0.35,
+            "dispatch_threshold_local": 0.7,
+            "urgent_wait_minutes": 7,
+            "upstream_lookahead_minutes": 15,
+            "upstream_weight": 0.5,
+            "age_weight": 0.1,
+            "persistence_weight": 0.002,
+            "hold_load_fraction": 0.05
+          },
+          "rules": []
+        }
+      },
+      "candidate": {
+        "version": "v3",
+        "coordination_mode": "decentralized",
+        "active_agents": [
+          "muni_agent",
+          "bart_agent",
+          "caltrain_agent"
+        ],
+        "active_tools": [
+          "local_dispatch_optimizer"
+        ],
+        "planning_horizon_minutes": 30,
+        "replanning_interval_minutes": 15,
+        "context_policy": "local_only",
+        "memory_window_steps": 6,
+        "verification_policy": "basic",
+        "optimization_strategy": "local_greedy",
+        "policy": {
+          "advisory_pressure_threshold": 0.45,
+          "advisory_eta_slack_minutes": 10,
+          "dispatch_threshold_regional": 0.35,
+          "dispatch_threshold_local": 0.7,
+          "urgent_wait_minutes": 7,
+          "upstream_lookahead_minutes": 15,
+          "upstream_weight": 0.5,
+          "age_weight": 0.1,
+          "persistence_weight": 0.002,
+          "hold_load_fraction": 0.05
+        },
+        "rules": []
+      },
+      "parent_version": "v1",
+      "planner": {
+        "kind": "llm",
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "requested_model": "gemini-3.8-flash",
+        "input_tokens": 15344,
+        "output_tokens": 681,
+        "thinking_tokens": 2196,
+        "attempts": 1,
+        "validation_errors": []
+      },
+      "development_run_id": "d9abf8a1-90c0-4ee0-858e-0d76e20aab83",
+      "status": "promoted",
+      "evaluation_seeds": [
+        1043,
+        2045,
+        3043,
+        4049,
+        5051
+      ],
+      "control_seed": 5003,
+      "control_parameters": {
+        "horizon_minutes": 180
+      },
+      "benchmark_scope": "city_commute",
+      "evaluator": {
+        "version": "city-intent-v3",
+        "demand_model": "citywide-27-neighborhoods-9-centers",
+        "boarding_within_10": 0.35,
+        "arrival_within_eta_10": 0.35,
+        "crowding_exposure": 0.2,
+        "operating_cost": 0.1,
+        "unsafe_action_penalty": 1000,
+        "boarding_limit_minutes": 10,
+        "eta_slack_minutes": 10,
+        "crowded_density_threshold": 1.5,
+        "crowding_normalization_minutes": 30,
+        "cost_units_per_rider": 9,
+        "reference": "Initial undisrupted requested-path ETA is frozen before any advisory; unfinished requests fail arrival target."
+      },
+      "config_diff": [
+        {
+          "path": "policy.dispatch_threshold_local",
+          "before": 1.2,
+          "after": 0.7
+        }
+      ],
+      "iteration": 2,
+      "scenario": "city_commute",
+      "automatic_trigger": null,
+      "scenario_parameters": {
+        "horizon_minutes": 180
+      },
+      "accepted": true,
+      "reason": "Promoted: held-out objective improved by at least 2%, at least 3 of 5 paired seeds won, feasibility passed and commuter regression stayed within 5%.",
+      "baseline_rule_telemetry": {},
+      "candidate_rule_telemetry": {},
+      "before": {
+        "total_passenger_delay_minutes": 36809.4,
+        "average_passenger_delay": 3.7672,
+        "missed_transfer_rate": 0.005418,
+        "missed_transfers": 52.6,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 18.106,
+        "total_passenger_wait_minutes": 176885.0,
+        "congestion": 569.8,
+        "max_station_queue": 231.0,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1345.8,
+        "additional_operating_cost": 608.0,
+        "extra_departures": 6.6,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8424.6,
+        "objective": 0.211495,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6730.6,
+        "boarding_within_10_minutes_rate": 0.688863,
+        "eta_on_time_arrived": 7370.0,
+        "eta_within_10_minutes_rate": 0.75433,
+        "regional_density_peak": 4.712,
+        "crowding_exposure_passenger_minutes": 23333.6,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "after": {
+        "total_passenger_delay_minutes": 35173.2,
+        "average_passenger_delay": 3.6002,
+        "missed_transfer_rate": 0.003742,
+        "missed_transfers": 36.2,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 17.7268,
+        "total_passenger_wait_minutes": 173174.2,
+        "congestion": 464.6,
+        "max_station_queue": 236.2,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1352.2,
+        "additional_operating_cost": 4066.0,
+        "extra_departures": 43.0,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8418.2,
+        "objective": 0.204615,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6870.0,
+        "boarding_within_10_minutes_rate": 0.703112,
+        "eta_on_time_arrived": 7461.0,
+        "eta_within_10_minutes_rate": 0.763628,
+        "regional_density_peak": 4.488,
+        "crowding_exposure_passenger_minutes": 19561.0,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "improvement_percent": 3.253031986571785,
+      "per_seed": [
+        {
+          "seed": 1043,
+          "before": {
+            "total_passenger_delay_minutes": 36798,
+            "average_passenger_delay": 3.777,
+            "missed_transfer_rate": 0.00377,
+            "missed_transfers": 36,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 18.251,
+            "total_passenger_wait_minutes": 177804,
+            "congestion": 553,
+            "max_station_queue": 240,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1182,
+            "additional_operating_cost": 790,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8560,
+            "objective": 0.214744,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6612,
+            "boarding_within_10_minutes_rate": 0.678711,
+            "eta_on_time_arrived": 7386,
+            "eta_within_10_minutes_rate": 0.758161,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 24474,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 34587,
+            "average_passenger_delay": 3.55,
+            "missed_transfer_rate": 0.00367,
+            "missed_transfers": 35,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 17.952,
+            "total_passenger_wait_minutes": 174890,
+            "congestion": 468,
+            "max_station_queue": 236,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1171,
+            "additional_operating_cost": 4080,
+            "extra_departures": 43,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8571,
+            "objective": 0.20693,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6814,
+            "boarding_within_10_minutes_rate": 0.699446,
+            "eta_on_time_arrived": 7475,
+            "eta_within_10_minutes_rate": 0.767296,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 22849,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "78910f85-e252-44fb-90b2-a161d662bd63",
+          "after_run_id": "72289a6c-f64e-43bd-ae1f-c010887839b8",
+          "objective_delta": -0.007814,
+          "improvement_percent": 3.638751,
+          "won": true
+        },
+        {
+          "seed": 2045,
+          "before": {
+            "total_passenger_delay_minutes": 39474,
+            "average_passenger_delay": 4.026,
+            "missed_transfer_rate": 0.00581,
+            "missed_transfers": 55,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.649,
+            "total_passenger_wait_minutes": 173028,
+            "congestion": 520,
+            "max_station_queue": 259,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1308,
+            "additional_operating_cost": 540,
+            "extra_departures": 6,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8496,
+            "objective": 0.217777,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6524,
+            "boarding_within_10_minutes_rate": 0.665443,
+            "eta_on_time_arrived": 7447,
+            "eta_within_10_minutes_rate": 0.759588,
+            "regional_density_peak": 3.84,
+            "crowding_exposure_passenger_minutes": 23421,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 35939,
+            "average_passenger_delay": 3.666,
+            "missed_transfer_rate": 0.0038,
+            "missed_transfers": 36,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.146,
+            "total_passenger_wait_minutes": 168102,
+            "congestion": 308,
+            "max_station_queue": 268,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1289,
+            "additional_operating_cost": 4240,
+            "extra_departures": 44,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8515,
+            "objective": 0.206457,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6689,
+            "boarding_within_10_minutes_rate": 0.682273,
+            "eta_on_time_arrived": 7612,
+            "eta_within_10_minutes_rate": 0.776418,
+            "regional_density_peak": 3.84,
+            "crowding_exposure_passenger_minutes": 17932,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "74481f0c-b884-47c9-bcfd-40bf1ea5b5d9",
+          "after_run_id": "bc590de8-c0cd-4640-881d-f298046eaaa3",
+          "objective_delta": -0.01132,
+          "improvement_percent": 5.197978,
+          "won": true
+        },
+        {
+          "seed": 3043,
+          "before": {
+            "total_passenger_delay_minutes": 33090,
+            "average_passenger_delay": 3.393,
+            "missed_transfer_rate": 0.00864,
+            "missed_transfers": 85,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.921,
+            "total_passenger_wait_minutes": 184532,
+            "congestion": 522,
+            "max_station_queue": 184,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1422,
+            "additional_operating_cost": 720,
+            "extra_departures": 8,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8331,
+            "objective": 0.204487,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6818,
+            "boarding_within_10_minutes_rate": 0.699067,
+            "eta_on_time_arrived": 7414,
+            "eta_within_10_minutes_rate": 0.760176,
+            "regional_density_peak": 6.12,
+            "crowding_exposure_passenger_minutes": 21069,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 31221,
+            "average_passenger_delay": 3.201,
+            "missed_transfer_rate": 0.00447,
+            "missed_transfers": 44,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.496,
+            "total_passenger_wait_minutes": 180389,
+            "congestion": 425,
+            "max_station_queue": 184,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1451,
+            "additional_operating_cost": 3830,
+            "extra_departures": 41,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8302,
+            "objective": 0.19986,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6867,
+            "boarding_within_10_minutes_rate": 0.704091,
+            "eta_on_time_arrived": 7536,
+            "eta_within_10_minutes_rate": 0.772685,
+            "regional_density_peak": 5.0,
+            "crowding_exposure_passenger_minutes": 18095,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "9c1bec00-dbc8-4dd2-b307-af8b1a6f0bcb",
+          "after_run_id": "9eedd40c-d2fa-45e2-9e21-45633e4a6a1c",
+          "objective_delta": -0.004627,
+          "improvement_percent": 2.262736,
+          "won": true
+        },
+        {
+          "seed": 4049,
+          "before": {
+            "total_passenger_delay_minutes": 37970,
+            "average_passenger_delay": 3.904,
+            "missed_transfer_rate": 0.00517,
+            "missed_transfers": 52,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.402,
+            "total_passenger_wait_minutes": 178963,
+            "congestion": 891,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1288,
+            "additional_operating_cost": 630,
+            "extra_departures": 7,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8437,
+            "objective": 0.212989,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6701,
+            "boarding_within_10_minutes_rate": 0.689049,
+            "eta_on_time_arrived": 7303,
+            "eta_within_10_minutes_rate": 0.750951,
+            "regional_density_peak": 4.0,
+            "crowding_exposure_passenger_minutes": 23732,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 39262,
+            "average_passenger_delay": 4.037,
+            "missed_transfer_rate": 0.00328,
+            "missed_transfers": 33,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.219,
+            "total_passenger_wait_minutes": 177176,
+            "congestion": 786,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1343,
+            "additional_operating_cost": 4190,
+            "extra_departures": 45,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8382,
+            "objective": 0.213197,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6757,
+            "boarding_within_10_minutes_rate": 0.694807,
+            "eta_on_time_arrived": 7282,
+            "eta_within_10_minutes_rate": 0.748792,
+            "regional_density_peak": 4.0,
+            "crowding_exposure_passenger_minutes": 19940,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "4ca495da-9835-4f80-8c12-34ab0236e947",
+          "after_run_id": "9158fb17-dc84-4c06-b3e8-b6657ff97a25",
+          "objective_delta": 0.000208,
+          "improvement_percent": -0.097658,
+          "won": false
+        },
+        {
+          "seed": 5051,
+          "before": {
+            "total_passenger_delay_minutes": 36715,
+            "average_passenger_delay": 3.736,
+            "missed_transfer_rate": 0.0037,
+            "missed_transfers": 35,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 17.307,
+            "total_passenger_wait_minutes": 170098,
+            "congestion": 363,
+            "max_station_queue": 229,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1529,
+            "additional_operating_cost": 360,
+            "extra_departures": 4,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8299,
+            "objective": 0.20748,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 6998,
+            "boarding_within_10_minutes_rate": 0.712047,
+            "eta_on_time_arrived": 7300,
+            "eta_within_10_minutes_rate": 0.742776,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 23972,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 34857,
+            "average_passenger_delay": 3.547,
+            "missed_transfer_rate": 0.00349,
+            "missed_transfers": 33,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 16.821,
+            "total_passenger_wait_minutes": 165314,
+            "congestion": 336,
+            "max_station_queue": 250,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1507,
+            "additional_operating_cost": 3990,
+            "extra_departures": 42,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8321,
+            "objective": 0.19663,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 7223,
+            "boarding_within_10_minutes_rate": 0.734941,
+            "eta_on_time_arrived": 7400,
+            "eta_within_10_minutes_rate": 0.752951,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 18989,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "738c3dbb-1eaa-486f-bf8b-65a53cd83af9",
+          "after_run_id": "a7ec4c95-6ea1-4ab3-990e-1864f0fcca05",
+          "objective_delta": -0.01085,
+          "improvement_percent": 5.22942,
+          "won": true
+        }
+      ],
+      "seed_wins": 4,
+      "required_seed_wins": 3,
+      "before_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 36809.4,
+          "stddev": 2111.400635,
+          "min": 33090,
+          "max": 39474
+        },
+        "average_passenger_delay": {
+          "mean": 3.7672,
+          "stddev": 0.212973,
+          "min": 3.393,
+          "max": 4.026
+        },
+        "missed_transfer_rate": {
+          "mean": 0.005418,
+          "stddev": 0.001804,
+          "min": 0.0037,
+          "max": 0.00864
+        },
+        "missed_transfers": {
+          "mean": 52.6,
+          "stddev": 18.117395,
+          "min": 35,
+          "max": 85
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 18.106,
+          "stddev": 0.56923,
+          "min": 17.307,
+          "max": 18.921
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 176885.0,
+          "stddev": 4991.574341,
+          "min": 170098,
+          "max": 184532
+        },
+        "congestion": {
+          "mean": 569.8,
+          "stddev": 173.771574,
+          "min": 363,
+          "max": 891
+        },
+        "max_station_queue": {
+          "mean": 231.0,
+          "stddev": 25.385035,
+          "min": 184,
+          "max": 259
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1345.8,
+          "stddev": 119.137568,
+          "min": 1182,
+          "max": 1529
+        },
+        "additional_operating_cost": {
+          "mean": 608.0,
+          "stddev": 149.853262,
+          "min": 360,
+          "max": 790
+        },
+        "extra_departures": {
+          "mean": 6.6,
+          "stddev": 1.496663,
+          "min": 4,
+          "max": 8
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8424.6,
+          "stddev": 98.103211,
+          "min": 8299,
+          "max": 8560
+        },
+        "objective": {
+          "mean": 0.211495,
+          "stddev": 0.004847,
+          "min": 0.204487,
+          "max": 0.217777
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6730.6,
+          "stddev": 165.388754,
+          "min": 6524,
+          "max": 6998
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.688863,
+          "stddev": 0.016082,
+          "min": 0.665443,
+          "max": 0.712047
+        },
+        "eta_on_time_arrived": {
+          "mean": 7370.0,
+          "stddev": 59.177699,
+          "min": 7300,
+          "max": 7447
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.75433,
+          "stddev": 0.006654,
+          "min": 0.742776,
+          "max": 0.760176
+        },
+        "regional_density_peak": {
+          "mean": 4.712,
+          "stddev": 0.872477,
+          "min": 3.84,
+          "max": 6.12
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 23333.6,
+          "stddev": 1183.456057,
+          "min": 21069,
+          "max": 24474
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      },
+      "after_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 35173.2,
+          "stddev": 2583.340194,
+          "min": 31221,
+          "max": 39262
+        },
+        "average_passenger_delay": {
+          "mean": 3.6002,
+          "stddev": 0.268267,
+          "min": 3.201,
+          "max": 4.037
+        },
+        "missed_transfer_rate": {
+          "mean": 0.003742,
+          "stddev": 0.000404,
+          "min": 0.00328,
+          "max": 0.00447
+        },
+        "missed_transfers": {
+          "mean": 36.2,
+          "stddev": 4.069398,
+          "min": 33,
+          "max": 44
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 17.7268,
+          "stddev": 0.639132,
+          "min": 16.821,
+          "max": 18.496
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 173174.2,
+          "stddev": 5630.660153,
+          "min": 165314,
+          "max": 180389
+        },
+        "congestion": {
+          "mean": 464.6,
+          "stddev": 170.844491,
+          "min": 308,
+          "max": 786
+        },
+        "max_station_queue": {
+          "mean": 236.2,
+          "stddev": 28.187941,
+          "min": 184,
+          "max": 268
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1352.2,
+          "stddev": 118.858571,
+          "min": 1171,
+          "max": 1507
+        },
+        "additional_operating_cost": {
+          "mean": 4066.0,
+          "stddev": 146.505973,
+          "min": 3830,
+          "max": 4240
+        },
+        "extra_departures": {
+          "mean": 43.0,
+          "stddev": 1.414214,
+          "min": 41,
+          "max": 45
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8418.2,
+          "stddev": 106.750925,
+          "min": 8302,
+          "max": 8571
+        },
+        "objective": {
+          "mean": 0.204615,
+          "stddev": 0.00581,
+          "min": 0.19663,
+          "max": 0.213197
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6870.0,
+          "stddev": 186.163369,
+          "min": 6689,
+          "max": 7223
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.703112,
+          "stddev": 0.017497,
+          "min": 0.682273,
+          "max": 0.734941
+        },
+        "eta_on_time_arrived": {
+          "mean": 7461.0,
+          "stddev": 113.475989,
+          "min": 7282,
+          "max": 7612
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.763628,
+          "stddev": 0.010892,
+          "min": 0.748792,
+          "max": 0.776418
+        },
+        "regional_density_peak": {
+          "mean": 4.488,
+          "stddev": 0.575444,
+          "min": 3.84,
+          "max": 5.32
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 19561.0,
+          "stddev": 1793.575535,
+          "min": 17932,
+          "max": 22849
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      }
+    },
+    {
+      "mutation_id": "e1e79efb-04a2-4740-ad69-a6b06c132225",
+      "proposal": {
+        "diagnosis": "In v3, lowering dispatch_threshold_local from 1.2 to 0.7 was successfully promoted (+3.25% improvement across 4 of 5 seeds), confirming that local standby dispatch responsiveness is the primary lever for clearing urban transit bottlenecks. However, telemetry still shows 1,569 unserved passengers, 427 denied boardings on Muni Bus, and peak queues exceeding 110 riders on lines 57, 6, and 22. At the 0.7 local threshold, routes with queues between 25 and 40 riders (e.g., Muni 30, 28R, M, 12, 19, 29) are denied standby support until queues compound, resulting in cascading boardings denied at minutes 120-162. Additional operating cost is only 3,420 out of the 12,000 budget, indicating ample fiscal and standby vehicle capacity to intervene earlier.",
+        "rationale": "By reducing dispatch_threshold_local from 0.7 to 0.45, local agents will trigger supplemental standby dispatches when queue ratios exceed 0.45 rather than waiting for 0.7. This allows Muni Bus agents to dispatch standby vehicles to high-density edges with 25-40 waiting passengers before queues cause denied boardings. This isolates a single parameter hypothesis while preserving all other policies, agent memberships, and toolchains.",
+        "expected_improvement": "Standby buses will deploy proactively for edges with moderate-to-high queues, reducing denied boardings across Muni Bus lines, lowering average passenger wait time and total passenger delay without exceeding the 12,000 gross supplemental service budget.",
+        "confidence": 0.82,
+        "candidate": {
+          "version": "v4",
+          "coordination_mode": "decentralized",
+          "active_agents": [
+            "muni_agent",
+            "bart_agent",
+            "caltrain_agent"
+          ],
+          "active_tools": [
+            "local_dispatch_optimizer"
+          ],
+          "planning_horizon_minutes": 30,
+          "replanning_interval_minutes": 15,
+          "context_policy": "local_only",
+          "memory_window_steps": 6,
+          "verification_policy": "basic",
+          "optimization_strategy": "local_greedy",
+          "policy": {
+            "advisory_pressure_threshold": 0.45,
+            "advisory_eta_slack_minutes": 10,
+            "dispatch_threshold_regional": 0.35,
+            "dispatch_threshold_local": 0.45,
+            "urgent_wait_minutes": 7,
+            "upstream_lookahead_minutes": 15,
+            "upstream_weight": 0.5,
+            "age_weight": 0.1,
+            "persistence_weight": 0.002,
+            "hold_load_fraction": 0.05
+          },
+          "rules": []
+        }
+      },
+      "candidate": {
+        "version": "v4",
+        "coordination_mode": "decentralized",
+        "active_agents": [
+          "muni_agent",
+          "bart_agent",
+          "caltrain_agent"
+        ],
+        "active_tools": [
+          "local_dispatch_optimizer"
+        ],
+        "planning_horizon_minutes": 30,
+        "replanning_interval_minutes": 15,
+        "context_policy": "local_only",
+        "memory_window_steps": 6,
+        "verification_policy": "basic",
+        "optimization_strategy": "local_greedy",
+        "policy": {
+          "advisory_pressure_threshold": 0.45,
+          "advisory_eta_slack_minutes": 10,
+          "dispatch_threshold_regional": 0.35,
+          "dispatch_threshold_local": 0.45,
+          "urgent_wait_minutes": 7,
+          "upstream_lookahead_minutes": 15,
+          "upstream_weight": 0.5,
+          "age_weight": 0.1,
+          "persistence_weight": 0.002,
+          "hold_load_fraction": 0.05
+        },
+        "rules": []
+      },
+      "parent_version": "v3",
+      "planner": {
+        "kind": "llm",
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "requested_model": "gemini-3.8-flash",
+        "input_tokens": 15570,
+        "output_tokens": 687,
+        "thinking_tokens": 5722,
+        "attempts": 1,
+        "validation_errors": []
+      },
+      "development_run_id": "0dc39c39-2da6-4c7b-a1c1-f5056235010d",
+      "status": "rejected",
+      "evaluation_seeds": [
+        1043,
+        2045,
+        3043,
+        4049,
+        5051
+      ],
+      "control_seed": 5003,
+      "control_parameters": {
+        "horizon_minutes": 180
+      },
+      "benchmark_scope": "city_commute",
+      "evaluator": {
+        "version": "city-intent-v3",
+        "demand_model": "citywide-27-neighborhoods-9-centers",
+        "boarding_within_10": 0.35,
+        "arrival_within_eta_10": 0.35,
+        "crowding_exposure": 0.2,
+        "operating_cost": 0.1,
+        "unsafe_action_penalty": 1000,
+        "boarding_limit_minutes": 10,
+        "eta_slack_minutes": 10,
+        "crowded_density_threshold": 1.5,
+        "crowding_normalization_minutes": 30,
+        "cost_units_per_rider": 9,
+        "reference": "Initial undisrupted requested-path ETA is frozen before any advisory; unfinished requests fail arrival target."
+      },
+      "config_diff": [
+        {
+          "path": "policy.dispatch_threshold_local",
+          "before": 0.7,
+          "after": 0.45
+        }
+      ],
+      "iteration": 3,
+      "scenario": "city_commute",
+      "automatic_trigger": null,
+      "scenario_parameters": {
+        "horizon_minutes": 180
+      },
+      "accepted": false,
+      "reason": "Rejected: held-out improvement below 2%; fewer than 3 of 5 held-out seeds improved",
+      "baseline_rule_telemetry": {},
+      "candidate_rule_telemetry": {},
+      "before": {
+        "total_passenger_delay_minutes": 35173.2,
+        "average_passenger_delay": 3.6002,
+        "missed_transfer_rate": 0.003742,
+        "missed_transfers": 36.2,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 17.7268,
+        "total_passenger_wait_minutes": 173174.2,
+        "congestion": 464.6,
+        "max_station_queue": 236.2,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1352.2,
+        "additional_operating_cost": 4066.0,
+        "extra_departures": 43.0,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8418.2,
+        "objective": 0.204615,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6870.0,
+        "boarding_within_10_minutes_rate": 0.703112,
+        "eta_on_time_arrived": 7461.0,
+        "eta_within_10_minutes_rate": 0.763628,
+        "regional_density_peak": 4.488,
+        "crowding_exposure_passenger_minutes": 19561.0,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "after": {
+        "total_passenger_delay_minutes": 36305.0,
+        "average_passenger_delay": 3.7158,
+        "missed_transfer_rate": 0.00586,
+        "missed_transfers": 56.8,
+        "transfer_opportunities": 9673.2,
+        "passenger_wait_time": 17.7796,
+        "total_passenger_wait_minutes": 173691.4,
+        "congestion": 599.0,
+        "max_station_queue": 228.0,
+        "capacity_violations": 0.0,
+        "feasibility_violations": 0.0,
+        "unserved_passengers": 1358.4,
+        "additional_operating_cost": 5750.0,
+        "extra_departures": 57.2,
+        "service_holds": 0.0,
+        "generated_passengers": 9770.4,
+        "served_passengers": 8412.0,
+        "objective": 0.207668,
+        "first_boarded_passengers": 9770.4,
+        "boarded_within_10_minutes": 6931.8,
+        "boarding_within_10_minutes_rate": 0.709428,
+        "eta_on_time_arrived": 7408.0,
+        "eta_within_10_minutes_rate": 0.758208,
+        "regional_density_peak": 4.872,
+        "crowding_exposure_passenger_minutes": 21693.0,
+        "advisory_offered_passengers": 0.0,
+        "advisory_accepted_passengers": 0.0,
+        "active_services": 82.6
+      },
+      "improvement_percent": -1.4920704738166801,
+      "per_seed": [
+        {
+          "seed": 1043,
+          "before": {
+            "total_passenger_delay_minutes": 34587,
+            "average_passenger_delay": 3.55,
+            "missed_transfer_rate": 0.00367,
+            "missed_transfers": 35,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 17.952,
+            "total_passenger_wait_minutes": 174890,
+            "congestion": 468,
+            "max_station_queue": 236,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1171,
+            "additional_operating_cost": 4080,
+            "extra_departures": 43,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8571,
+            "objective": 0.20693,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6814,
+            "boarding_within_10_minutes_rate": 0.699446,
+            "eta_on_time_arrived": 7475,
+            "eta_within_10_minutes_rate": 0.767296,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 22849,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 36232,
+            "average_passenger_delay": 3.719,
+            "missed_transfer_rate": 0.00419,
+            "missed_transfers": 40,
+            "transfer_opportunities": 9543,
+            "passenger_wait_time": 18.045,
+            "total_passenger_wait_minutes": 175797,
+            "congestion": 625,
+            "max_station_queue": 236,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1182,
+            "additional_operating_cost": 5210,
+            "extra_departures": 54,
+            "service_holds": 0,
+            "generated_passengers": 9742,
+            "served_passengers": 8560,
+            "objective": 0.21243,
+            "first_boarded_passengers": 9742,
+            "boarded_within_10_minutes": 6794,
+            "boarding_within_10_minutes_rate": 0.697393,
+            "eta_on_time_arrived": 7415,
+            "eta_within_10_minutes_rate": 0.761137,
+            "regional_density_peak": 5.32,
+            "crowding_exposure_passenger_minutes": 24803,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "1adbbb49-019c-4fce-aa6f-14e8a203b16a",
+          "after_run_id": "dce08238-c2b7-4efd-9ef1-b826bc6ed677",
+          "objective_delta": 0.0055,
+          "improvement_percent": -2.657904,
+          "won": false
+        },
+        {
+          "seed": 2045,
+          "before": {
+            "total_passenger_delay_minutes": 35939,
+            "average_passenger_delay": 3.666,
+            "missed_transfer_rate": 0.0038,
+            "missed_transfers": 36,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.146,
+            "total_passenger_wait_minutes": 168102,
+            "congestion": 308,
+            "max_station_queue": 268,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1289,
+            "additional_operating_cost": 4240,
+            "extra_departures": 44,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8515,
+            "objective": 0.206457,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6689,
+            "boarding_within_10_minutes_rate": 0.682273,
+            "eta_on_time_arrived": 7612,
+            "eta_within_10_minutes_rate": 0.776418,
+            "regional_density_peak": 3.84,
+            "crowding_exposure_passenger_minutes": 17932,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 38512,
+            "average_passenger_delay": 3.928,
+            "missed_transfer_rate": 0.0075,
+            "missed_transfers": 71,
+            "transfer_opportunities": 9467,
+            "passenger_wait_time": 17.214,
+            "total_passenger_wait_minutes": 168763,
+            "congestion": 530,
+            "max_station_queue": 268,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1315,
+            "additional_operating_cost": 6080,
+            "extra_departures": 59,
+            "service_holds": 0,
+            "generated_passengers": 9804,
+            "served_passengers": 8489,
+            "objective": 0.208247,
+            "first_boarded_passengers": 9804,
+            "boarded_within_10_minutes": 6893,
+            "boarding_within_10_minutes_rate": 0.70308,
+            "eta_on_time_arrived": 7480,
+            "eta_within_10_minutes_rate": 0.762954,
+            "regional_density_peak": 4.6,
+            "crowding_exposure_passenger_minutes": 21277,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "9999f95a-1feb-4ddb-ab88-2cb32e4f0e15",
+          "after_run_id": "03006722-bd6f-41de-aa46-5a2db8bdd575",
+          "objective_delta": 0.00179,
+          "improvement_percent": -0.867009,
+          "won": false
+        },
+        {
+          "seed": 3043,
+          "before": {
+            "total_passenger_delay_minutes": 31221,
+            "average_passenger_delay": 3.201,
+            "missed_transfer_rate": 0.00447,
+            "missed_transfers": 44,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.496,
+            "total_passenger_wait_minutes": 180389,
+            "congestion": 425,
+            "max_station_queue": 184,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1451,
+            "additional_operating_cost": 3830,
+            "extra_departures": 41,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8302,
+            "objective": 0.19986,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6867,
+            "boarding_within_10_minutes_rate": 0.704091,
+            "eta_on_time_arrived": 7536,
+            "eta_within_10_minutes_rate": 0.772685,
+            "regional_density_peak": 5.0,
+            "crowding_exposure_passenger_minutes": 18095,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 32888,
+            "average_passenger_delay": 3.372,
+            "missed_transfer_rate": 0.00905,
+            "missed_transfers": 89,
+            "transfer_opportunities": 9837,
+            "passenger_wait_time": 18.613,
+            "total_passenger_wait_minutes": 181535,
+            "congestion": 556,
+            "max_station_queue": 179,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1453,
+            "additional_operating_cost": 5690,
+            "extra_departures": 57,
+            "service_holds": 0,
+            "generated_passengers": 9753,
+            "served_passengers": 8300,
+            "objective": 0.203585,
+            "first_boarded_passengers": 9753,
+            "boarded_within_10_minutes": 6966,
+            "boarding_within_10_minutes_rate": 0.714242,
+            "eta_on_time_arrived": 7436,
+            "eta_within_10_minutes_rate": 0.762432,
+            "regional_density_peak": 6.12,
+            "crowding_exposure_passenger_minutes": 20391,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "18a2295e-b60f-484e-89bd-99b080ab8e56",
+          "after_run_id": "8b8d2c14-00ce-4067-bbeb-ea485798a026",
+          "objective_delta": 0.003725,
+          "improvement_percent": -1.863805,
+          "won": false
+        },
+        {
+          "seed": 4049,
+          "before": {
+            "total_passenger_delay_minutes": 39262,
+            "average_passenger_delay": 4.037,
+            "missed_transfer_rate": 0.00328,
+            "missed_transfers": 33,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.219,
+            "total_passenger_wait_minutes": 177176,
+            "congestion": 786,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1343,
+            "additional_operating_cost": 4190,
+            "extra_departures": 45,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8382,
+            "objective": 0.213197,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6757,
+            "boarding_within_10_minutes_rate": 0.694807,
+            "eta_on_time_arrived": 7282,
+            "eta_within_10_minutes_rate": 0.748792,
+            "regional_density_peak": 4.0,
+            "crowding_exposure_passenger_minutes": 19940,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "after": {
+            "total_passenger_delay_minutes": 39206,
+            "average_passenger_delay": 4.031,
+            "missed_transfer_rate": 0.00507,
+            "missed_transfers": 51,
+            "transfer_opportunities": 10061,
+            "passenger_wait_time": 18.166,
+            "total_passenger_wait_minutes": 176660,
+            "congestion": 912,
+            "max_station_queue": 243,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1344,
+            "additional_operating_cost": 5690,
+            "extra_departures": 57,
+            "service_holds": 0,
+            "generated_passengers": 9725,
+            "served_passengers": 8381,
+            "objective": 0.213239,
+            "first_boarded_passengers": 9725,
+            "boarded_within_10_minutes": 6785,
+            "boarding_within_10_minutes_rate": 0.697686,
+            "eta_on_time_arrived": 7307,
+            "eta_within_10_minutes_rate": 0.751362,
+            "regional_density_peak": 4.04,
+            "crowding_exposure_passenger_minutes": 20284,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 83
+          },
+          "before_run_id": "8d4594f9-ab54-4124-94b4-e5f83cfc0ecf",
+          "after_run_id": "9454e512-87cc-4ebc-8867-8c28e4e67363",
+          "objective_delta": 4.2e-05,
+          "improvement_percent": -0.0197,
+          "won": false
+        },
+        {
+          "seed": 5051,
+          "before": {
+            "total_passenger_delay_minutes": 34857,
+            "average_passenger_delay": 3.547,
+            "missed_transfer_rate": 0.00349,
+            "missed_transfers": 33,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 16.821,
+            "total_passenger_wait_minutes": 165314,
+            "congestion": 336,
+            "max_station_queue": 250,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1507,
+            "additional_operating_cost": 3990,
+            "extra_departures": 42,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8321,
+            "objective": 0.19663,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 7223,
+            "boarding_within_10_minutes_rate": 0.734941,
+            "eta_on_time_arrived": 7400,
+            "eta_within_10_minutes_rate": 0.752951,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 18989,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "after": {
+            "total_passenger_delay_minutes": 34687,
+            "average_passenger_delay": 3.529,
+            "missed_transfer_rate": 0.00349,
+            "missed_transfers": 33,
+            "transfer_opportunities": 9458,
+            "passenger_wait_time": 16.86,
+            "total_passenger_wait_minutes": 165702,
+            "congestion": 372,
+            "max_station_queue": 214,
+            "capacity_violations": 0,
+            "feasibility_violations": 0,
+            "unserved_passengers": 1498,
+            "additional_operating_cost": 6080,
+            "extra_departures": 59,
+            "service_holds": 0,
+            "generated_passengers": 9828,
+            "served_passengers": 8330,
+            "objective": 0.200838,
+            "first_boarded_passengers": 9828,
+            "boarded_within_10_minutes": 7221,
+            "boarding_within_10_minutes_rate": 0.734737,
+            "eta_on_time_arrived": 7402,
+            "eta_within_10_minutes_rate": 0.753154,
+            "regional_density_peak": 4.28,
+            "crowding_exposure_passenger_minutes": 21710,
+            "advisory_offered_passengers": 0,
+            "advisory_accepted_passengers": 0,
+            "active_services": 82
+          },
+          "before_run_id": "9fdb219c-b6d1-4695-8dff-2d91f3b970f4",
+          "after_run_id": "734b2dd9-ad2c-454a-b966-9ca424a948c0",
+          "objective_delta": 0.004208,
+          "improvement_percent": -2.14006,
+          "won": false
+        }
+      ],
+      "seed_wins": 0,
+      "required_seed_wins": 3,
+      "before_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 35173.2,
+          "stddev": 2583.340194,
+          "min": 31221,
+          "max": 39262
+        },
+        "average_passenger_delay": {
+          "mean": 3.6002,
+          "stddev": 0.268267,
+          "min": 3.201,
+          "max": 4.037
+        },
+        "missed_transfer_rate": {
+          "mean": 0.003742,
+          "stddev": 0.000404,
+          "min": 0.00328,
+          "max": 0.00447
+        },
+        "missed_transfers": {
+          "mean": 36.2,
+          "stddev": 4.069398,
+          "min": 33,
+          "max": 44
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 17.7268,
+          "stddev": 0.639132,
+          "min": 16.821,
+          "max": 18.496
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 173174.2,
+          "stddev": 5630.660153,
+          "min": 165314,
+          "max": 180389
+        },
+        "congestion": {
+          "mean": 464.6,
+          "stddev": 170.844491,
+          "min": 308,
+          "max": 786
+        },
+        "max_station_queue": {
+          "mean": 236.2,
+          "stddev": 28.187941,
+          "min": 184,
+          "max": 268
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1352.2,
+          "stddev": 118.858571,
+          "min": 1171,
+          "max": 1507
+        },
+        "additional_operating_cost": {
+          "mean": 4066.0,
+          "stddev": 146.505973,
+          "min": 3830,
+          "max": 4240
+        },
+        "extra_departures": {
+          "mean": 43.0,
+          "stddev": 1.414214,
+          "min": 41,
+          "max": 45
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8418.2,
+          "stddev": 106.750925,
+          "min": 8302,
+          "max": 8571
+        },
+        "objective": {
+          "mean": 0.204615,
+          "stddev": 0.00581,
+          "min": 0.19663,
+          "max": 0.213197
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6870.0,
+          "stddev": 186.163369,
+          "min": 6689,
+          "max": 7223
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.703112,
+          "stddev": 0.017497,
+          "min": 0.682273,
+          "max": 0.734941
+        },
+        "eta_on_time_arrived": {
+          "mean": 7461.0,
+          "stddev": 113.475989,
+          "min": 7282,
+          "max": 7612
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.763628,
+          "stddev": 0.010892,
+          "min": 0.748792,
+          "max": 0.776418
+        },
+        "regional_density_peak": {
+          "mean": 4.488,
+          "stddev": 0.575444,
+          "min": 3.84,
+          "max": 5.32
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 19561.0,
+          "stddev": 1793.575535,
+          "min": 17932,
+          "max": 22849
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      },
+      "after_distribution": {
+        "total_passenger_delay_minutes": {
+          "mean": 36305.0,
+          "stddev": 2348.863214,
+          "min": 32888,
+          "max": 39206
+        },
+        "average_passenger_delay": {
+          "mean": 3.7158,
+          "stddev": 0.243919,
+          "min": 3.372,
+          "max": 4.031
+        },
+        "missed_transfer_rate": {
+          "mean": 0.00586,
+          "stddev": 0.002093,
+          "min": 0.00349,
+          "max": 0.00905
+        },
+        "missed_transfers": {
+          "mean": 56.8,
+          "stddev": 20.595145,
+          "min": 33,
+          "max": 89
+        },
+        "transfer_opportunities": {
+          "mean": 9673.2,
+          "stddev": 237.907881,
+          "min": 9458,
+          "max": 10061
+        },
+        "passenger_wait_time": {
+          "mean": 17.7796,
+          "stddev": 0.64496,
+          "min": 16.86,
+          "max": 18.613
+        },
+        "total_passenger_wait_minutes": {
+          "mean": 173691.4,
+          "stddev": 5707.676186,
+          "min": 165702,
+          "max": 181535
+        },
+        "congestion": {
+          "mean": 599.0,
+          "stddev": 177.078514,
+          "min": 372,
+          "max": 912
+        },
+        "max_station_queue": {
+          "mean": 228.0,
+          "stddev": 29.953297,
+          "min": 179,
+          "max": 268
+        },
+        "capacity_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "feasibility_violations": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "unserved_passengers": {
+          "mean": 1358.4,
+          "stddev": 111.03621,
+          "min": 1182,
+          "max": 1498
+        },
+        "additional_operating_cost": {
+          "mean": 5750.0,
+          "stddev": 321.434286,
+          "min": 5210,
+          "max": 6080
+        },
+        "extra_departures": {
+          "mean": 57.2,
+          "stddev": 1.83303,
+          "min": 54,
+          "max": 59
+        },
+        "service_holds": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "generated_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "served_passengers": {
+          "mean": 8412.0,
+          "stddev": 98.042848,
+          "min": 8300,
+          "max": 8560
+        },
+        "objective": {
+          "mean": 0.207668,
+          "stddev": 0.004845,
+          "min": 0.200838,
+          "max": 0.213239
+        },
+        "first_boarded_passengers": {
+          "mean": 9770.4,
+          "stddev": 39.03127,
+          "min": 9725,
+          "max": 9828
+        },
+        "boarded_within_10_minutes": {
+          "mean": 6931.8,
+          "stddev": 159.280131,
+          "min": 6785,
+          "max": 7221
+        },
+        "boarding_within_10_minutes_rate": {
+          "mean": 0.709428,
+          "stddev": 0.014048,
+          "min": 0.697393,
+          "max": 0.734737
+        },
+        "eta_on_time_arrived": {
+          "mean": 7408.0,
+          "stddev": 57.015787,
+          "min": 7307,
+          "max": 7480
+        },
+        "eta_within_10_minutes_rate": {
+          "mean": 0.758208,
+          "stddev": 0.004927,
+          "min": 0.751362,
+          "max": 0.762954
+        },
+        "regional_density_peak": {
+          "mean": 4.872,
+          "stddev": 0.758272,
+          "min": 4.04,
+          "max": 6.12
+        },
+        "crowding_exposure_passenger_minutes": {
+          "mean": 21693.0,
+          "stddev": 1644.744965,
+          "min": 20284,
+          "max": 24803
+        },
+        "advisory_offered_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "advisory_accepted_passengers": {
+          "mean": 0.0,
+          "stddev": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "active_services": {
+          "mean": 82.6,
+          "stddev": 0.489898,
+          "min": 82,
+          "max": 83
+        }
+      }
+    }
+  ],
+  "comparison": {
+    "static": {
+      "total_passenger_delay_minutes": 50090,
+      "average_passenger_delay": 5.142,
+      "missed_transfer_rate": 0.01625,
+      "missed_transfers": 160,
+      "transfer_opportunities": 9847,
+      "passenger_wait_time": 18.75,
+      "total_passenger_wait_minutes": 182648,
+      "congestion": 950,
+      "max_station_queue": 256,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1723,
+      "additional_operating_cost": 0,
+      "extra_departures": 0,
+      "service_holds": 0,
+      "generated_passengers": 9741,
+      "served_passengers": 8018,
+      "objective": 0.231473,
+      "first_boarded_passengers": 9741,
+      "boarded_within_10_minutes": 6608,
+      "boarding_within_10_minutes_rate": 0.67837,
+      "eta_on_time_arrived": 6947,
+      "eta_within_10_minutes_rate": 0.713171,
+      "regional_density_peak": 5.56,
+      "crowding_exposure_passenger_minutes": 27050,
+      "advisory_offered_passengers": 0,
+      "advisory_accepted_passengers": 0,
+      "active_services": 83
+    },
+    "fixed": {
+      "total_passenger_delay_minutes": 45223,
+      "average_passenger_delay": 4.643,
+      "missed_transfer_rate": 0.00498,
+      "missed_transfers": 49,
+      "transfer_opportunities": 9847,
+      "passenger_wait_time": 18.321,
+      "total_passenger_wait_minutes": 178461,
+      "congestion": 702,
+      "max_station_queue": 256,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1652,
+      "additional_operating_cost": 450,
+      "extra_departures": 5,
+      "service_holds": 0,
+      "generated_passengers": 9741,
+      "served_passengers": 8089,
+      "objective": 0.225951,
+      "first_boarded_passengers": 9741,
+      "boarded_within_10_minutes": 6608,
+      "boarding_within_10_minutes_rate": 0.67837,
+      "eta_on_time_arrived": 7042,
+      "eta_within_10_minutes_rate": 0.722924,
+      "regional_density_peak": 5.56,
+      "crowding_exposure_passenger_minutes": 23218,
+      "advisory_offered_passengers": 0,
+      "advisory_accepted_passengers": 0,
+      "active_services": 83
+    },
+    "evolved": {
+      "total_passenger_delay_minutes": 38455,
+      "average_passenger_delay": 3.948,
+      "missed_transfer_rate": 0.0068,
+      "missed_transfers": 67,
+      "transfer_opportunities": 9847,
+      "passenger_wait_time": 17.555,
+      "total_passenger_wait_minutes": 171007,
+      "congestion": 491,
+      "max_station_queue": 256,
+      "capacity_violations": 0,
+      "feasibility_violations": 0,
+      "unserved_passengers": 1569,
+      "additional_operating_cost": 3420,
+      "extra_departures": 38,
+      "service_holds": 0,
+      "generated_passengers": 9741,
+      "served_passengers": 8172,
+      "objective": 0.205985,
+      "first_boarded_passengers": 9741,
+      "boarded_within_10_minutes": 6834,
+      "boarding_within_10_minutes_rate": 0.701571,
+      "eta_on_time_arrived": 7324,
+      "eta_within_10_minutes_rate": 0.751874,
+      "regional_density_peak": 5.56,
+      "crowding_exposure_passenger_minutes": 15765,
+      "advisory_offered_passengers": 0,
+      "advisory_accepted_passengers": 0,
+      "active_services": 83
+    }
+  },
+  "run_ids": {
+    "static": "99310225-bb4d-41ea-8a74-909c6302b9c4",
+    "fixed": "62aa10d3-8095-41a3-88ad-73ef747205f2",
+    "evolved": "07b2c3c9-f0f8-4dc7-9b11-847041a6aa8e"
+  },
+  "evaluation_seeds": [
+    1043,
+    2045,
+    3043,
+    4049,
+    5051
+  ],
+  "evaluator": {
+    "version": "city-intent-v3",
+    "demand_model": "citywide-27-neighborhoods-9-centers",
+    "boarding_within_10": 0.35,
+    "arrival_within_eta_10": 0.35,
+    "crowding_exposure": 0.2,
+    "operating_cost": 0.1,
+    "unsafe_action_penalty": 1000,
+    "boarding_limit_minutes": 10,
+    "eta_slack_minutes": 10,
+    "crowded_density_threshold": 1.5,
+    "crowding_normalization_minutes": 30,
+    "cost_units_per_rider": 9,
+    "reference": "Initial undisrupted requested-path ETA is frozen before any advisory; unfinished requests fail arrival target."
+  },
+  "persistence": "offline_preview",
+  "database_verification": {
+    "connected": false,
+    "mode": "offline",
+    "eligible": false,
+    "error": "Explicit in-memory preview; no Atlas persistence.",
+    "counts": {
+      "transit_nodes": 3309,
+      "transit_connections": 8409,
+      "scenarios": 4,
+      "simulation_runs": 42,
+      "simulation_frames": 7602,
+      "agent_traces": 5202,
+      "harness_versions": 4,
+      "mutation_proposals": 3,
+      "evaluation_results": 3,
+      "deployment_decisions": 3,
+      "agent_memory": 3,
+      "control": 3,
+      "jobs": 0,
+      "automation_events": 0
+    }
+  },
+  "persisted_rule_telemetry": [
+    {
+      "run_id": "84046773-dadc-4a9f-93b6-21b29a118809",
+      "rule_telemetry": {}
+    },
+    {
+      "run_id": "d9abf8a1-90c0-4ee0-858e-0d76e20aab83",
+      "rule_telemetry": {}
+    },
+    {
+      "run_id": "0dc39c39-2da6-4c7b-a1c1-f5056235010d",
+      "rule_telemetry": {}
+    }
+  ]
+}

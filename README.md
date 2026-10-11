@@ -27,7 +27,7 @@ flowchart LR
 
 1. **Operate.** Muni, BART and Caltrain agents dispatch limited standby vehicles, hold departures for transfers, and (when a coordinator is active) post voluntary route advice. Riders are simulated cohorts with a fixed origin, destination and expected arrival, commuting between 27 neighborhoods (108 home stops) and 9 job centers (36 work stops), plus route-local trips on every published line.
 2. **Monitor.** Every 15 simulated minutes the service monitor checks whether riders boarded within 10 minutes (target 80%) and how many wait in crowded queues. Two misses in a row trigger a review; otherwise the harness is kept.
-3. **Propose.** The planner reads the failing traces and past lessons, then changes the harness configuration: which agents and tools run, what context they share, how often they replan, bounded policy parameters, and up to 12 typed operating rules. It never writes code.
+3. **Propose.** The planner reads the failing traces and past lessons, then tests **one hypothesis**: a single policy parameter, rule or capability, changing at most 3 fields including required companions (enforced for Gemini and the fallback). It can change which agents and tools run, shared context, replanning cadence, bounded policy parameters, and up to 12 typed operating rules. It never writes code.
 4. **Validate and evaluate.** The candidate must pass a Pydantic safety envelope, then race the current version on five held-out seeds plus a control scenario.
 5. **Promote or reject.** The gate promotes only if the mean objective improves by at least 2%, at least 3 of 5 seeds win, and the control does not regress more than 5%. Rejections are stored and fed back to the planner as memory.
 
@@ -35,22 +35,22 @@ The interface shows the live map of riders and vehicles next to a diagram of who
 
 ## What "better" means
 
-The City Commute objective (`city-intent-v2`, lower is better) is fixed outside the mutation surface:
+The City Commute objective (`city-intent-v3`, lower is better) is fixed outside the mutation surface:
 
 ```text
 J = 0.35 × (1 − share boarding transit within 10 minutes)
   + 0.35 × (1 − share arriving by original ETA + 10 minutes)
   + 0.20 × crowding exposure (passenger-minutes, normalized)
-  + 0.10 × net additional operating cost (normalized)
+  + 0.10 × net additional operating cost / (riders × 9)
   + 1,000 × unsafe or infeasible actions
 ```
 
-Walking is not boarding, unserved riders count as missed, and accepting advice never resets a rider's original ETA. Resources are fixed (12 Muni bus, 4 Metro, 2 BART, 1 Caltrain standby pairs; 12,000 model cost units). Crowding uses assumed queue areas and a 1.5 people/m² threshold, which is a model assumption, not a safety standard. Full definitions: [demo/THESIS.md](demo/THESIS.md).
+The cost term means one 90-unit standby bus run breaks even if about three more riders board within 10 minutes. v2 used a fixed 20,000 normalizer that made every extra run a net loss, so nothing could be promoted; v3 was declared before its runs and v2 results keep their label. Walking is not boarding, unserved riders count as missed, and accepting advice never resets a rider's original ETA. Resources are fixed (12 Muni bus, 4 Metro, 2 BART, 1 Caltrain standby pairs; 12,000 model cost units). Crowding uses assumed queue areas and a 1.5 people/m² threshold, which is a model assumption, not a safety standard. Full definitions: [demo/THESIS.md](demo/THESIS.md).
 
 ## Results so far
 
-- **City Commute, citywide demand (current):** v1 boards 68% of riders within 10 minutes on seed 42 (objective 0.231). The first Gemini candidate on this demand was rejected (0 of 5 days, −5.3%). **v1 remains active; no city improvement is claimed.**
-- **City Commute, earlier concentrated demand:** all commuter trips ended at three downtown stops, creating bottlenecks (59% boarded within 10 minutes). Candidates were all rejected, the best at 4 of 5 days and +1.2%. The demo video was recorded on this earlier demand; records carry `evaluator.demand_model` to tell the two apart.
+- **City Commute (current, `city-intent-v3`):** in an offline Gemini run, the planner tried a transfer-hold rule (rejected, 1 of 5 days), then lowered the local dispatch trigger: **promoted, +3.25% on held-out days, 4 of 5 days won, control within 5%**. Its next change on top of v3 was rejected. On the seed-42 replay the evolved harness scores 0.206 vs 0.226 for fixed agents, and on-time boarding rises from 67.8% to 70.2%. Artifact: [demo/evaluation-city-v3-gemini-offline.json](demo/evaluation-city-v3-gemini-offline.json); an Atlas run is still to be recorded.
+- **What changed to make evolution meaningful:** Gemini's structured output had been rejecting the schema (`maxItems`), so proposals silently fell back to rules; demand ended at only three downtown stops; candidates bundled about six changes; standby vehicles carried riders one segment and vanished; and v2's cost normalizer made every extra run a net loss. All five are fixed, and all earlier city results ran under those conditions (the demo video included).
 - **Event Surge (earlier compact scenario):** a real Gemini-plus-Atlas run promoted model-generated v4 with a 22.23% lower mean objective; a later fallback proposal regressed 14.26% and was rejected. Evidence: [demo/evaluation-gemini-atlas.json](demo/evaluation-gemini-atlas.json).
 
 Read each decision's `planner.kind` before attributing it to a model: when the model call fails or returns invalid output, the run uses the clearly labeled rule-based fallback. Between the typed-rules change and October 11, Gemini rejected the proposal schema (`maxItems`), so those city proposals are rule-based; this is now fixed.
