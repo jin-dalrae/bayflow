@@ -1,0 +1,27 @@
+import {test,expect} from '@playwright/test';
+test('read-only running website audit',async({page},testInfo)=>{
+ test.skip(testInfo.config.metadata.isolatedFixture===true,'Read-only audit targets the actual user website and organizer Atlas.');
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/');
+ await expect(page.getByRole('heading',{name:'Who talks to whom.'})).toBeVisible();
+ await expect(page.locator('.diagram-node')).toHaveCount(10);
+ await expect(page.locator('.sf-map-source')).toContainText('Muni stops');
+ await expect(page.locator('.db-pill')).toContainText('Atlas connected');
+ const contract=await(await page.request.get('/api/openapi.json')).json();
+ console.log(JSON.stringify({operationsEndpoint:!!contract.paths['/operations/start'],horizonAccepted:!!contract.components.schemas.RunRequest.properties.horizon_minutes,profilesEndpoint:!!contract.paths['/city/scenarios'],initialIntentPanel:await page.locator('.passenger-proof').innerText(),pageErrors:errors}));
+ await expect(page.getByRole('button',{name:'Run autonomous simulation'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Evaluate manually'})).not.toBeVisible();
+ await expect(page.locator('.passenger-proof')).toContainText('Start the autonomous simulation');
+ expect(await page.locator('.decision').count()).toBeLessThanOrEqual(3);
+ await expect(page.locator('.configuration-diff')).toHaveCount(0);
+ await page.screenshot({path:'test-results/main-ui-audit.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)).toBe(false);
+ await page.screenshot({path:'test-results/main-ui-audit-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1100});
+ await page.getByRole('link',{name:'Evolution history',exact:true}).click();
+ await expect(page.locator('.history-controls')).toContainText('proposals');
+ await expect(page.locator('.history-entry')).not.toHaveCount(0);
+ await page.screenshot({path:'test-results/main-ui-audit-history.png',fullPage:true});
+ expect(errors).toEqual([]);
+});

@@ -12,6 +12,7 @@ import math
 import random
 from .city_network import get_city_network, get_city_demand_pairs
 from .agents import OPERATOR_AGENTS, create_operator_controllers, transfer_priority
+from .city_scenarios import get_city_scenario, active_profile_events
 
 CITY_EVALUATOR = {
     "version": "city-intent-v2",
@@ -52,6 +53,7 @@ def simulate_city(
     demand_scale=1.0,
     advisory_acceptance_rate=0.6,
     horizon_minutes=180,
+    city_profile="standard",
 ):
     if (
         not isinstance(horizon_minutes, int)
@@ -61,6 +63,12 @@ def simulate_city(
         raise ValueError("horizon_minutes must be an integer from180 to1440")
     if not 0.25 <= demand_scale <= 3 or not 0 <= advisory_acceptance_rate <= 1:
         raise ValueError("Invalid fixed scenario parameters")
+    profile = get_city_scenario(city_profile)
+    requested_demand_scale = demand_scale
+    requested_acceptance_rate = advisory_acceptance_rate
+    demand_scale *= profile.demand_multiplier
+    if profile.acceptance_override is not None:
+        advisory_acceptance_rate = profile.acceptance_override
     net = get_city_network(horizon_minutes=horizon_minutes)
     nodes = {n["id"]: n for n in net["nodes"]}
     edges = {e["id"]: e for e in net["edges"]}
@@ -364,6 +372,21 @@ def simulate_city(
             births[minute].append(
                 (pair, max(1, round(caltrain_rng.randint(10, 30) * demand_scale)))
             )
+    if profile.stadium_multiplier > 1:
+        for minute, requests in births.items():
+            if profile.stadium_start <= minute < profile.stadium_end:
+                births[minute] = [
+                    (
+                        pair,
+                        (
+                            count * profile.stadium_multiplier
+                            if pair.get("downtown") == "Mission Bay"
+                            and pair.get("direction") == "outbound"
+                            else count
+                        ),
+                    )
+                    for pair, count in requests
+                ]
     # Precompute requested paths independent of subsequent queue pressure and harness.
     for minute, requests in births.items():
         births[minute] = [
@@ -625,7 +648,7 @@ def simulate_city(
                     ),
                     incoming_transfer_riders=sum(count for arrival, count in incoming),
                 )
-                for rule in sorted(config.rules,key=lambda r:r.id):
+                for rule in sorted(config.rules, key=lambda r: r.id):
                     if not rule.enabled or op not in rule.scope_operators:
                         continue
                     telemetry[rule.id]["evaluations"] += 1
@@ -778,11 +801,13 @@ def simulate_city(
             held_due = eid in held and held[eid]["due"] == minute
             scheduled = held_due or (eid not in held and minute == departure(minute, e))
             disrupted = False
+            bart_delay_minutes = 0
             held_rule = held[eid]["rule_id"] if held_due else None
             if held_due:
                 del held[eid]
             if (
-                op == "Muni Bus"
+                profile.standard_disruptions
+                and op == "Muni Bus"
                 and e["service"] == "22"
                 and 30 <= minute < 75
                 and (minute - e.get("departure_offset_minutes", 0)) % 30 == 15
@@ -790,11 +815,36 @@ def simulate_city(
                 scheduled = False
                 disrupted = True
             if (
-                op == "BART"
+                profile.standard_disruptions
+                and op == "BART"
                 and e["source"] in {"BART:EMBR", "BART:MONT", "BART:POWL"}
                 and 45 <= minute < 75
             ):
                 disrupted = True
+            if disrupted and op == "BART":
+                bart_delay_minutes = 3
+            if (
+                profile.bus_gap_route
+                and op == "Muni Bus"
+                and e["service"] == profile.bus_gap_route
+                and profile.bus_gap_start <= minute < profile.bus_gap_end
+                and (
+                    (minute - e.get("departure_offset_minutes", 0))
+                    // e["headway_minutes"]
+                )
+                % 2
+                == 1
+            ):
+                scheduled = False
+                disrupted = True
+            if (
+                profile.bart_delay_minutes
+                and op == "BART"
+                and e["source"] in {"BART:EMBR", "BART:MONT", "BART:POWL"}
+                and profile.bart_delay_start <= minute < profile.bart_delay_end
+            ):
+                disrupted = True
+                bart_delay_minutes = max(bart_delay_minutes, profile.bart_delay_minutes)
             if (
                 mode != "static"
                 and scheduled
@@ -928,7 +978,7 @@ def simulate_city(
                     packs[-1].append(replace(c, count=n))
                     used += n
                     amount -= n
-            duration = e["travel_minutes"] + (3 if disrupted and op == "BART" else 0)
+            duration = e["travel_minutes"] + bart_delay_minutes
             for index, pack in enumerate(packs):
                 if not pack:
                     continue
@@ -1054,7 +1104,7 @@ def simulate_city(
                     )
                     for v in moving
                 ],
-                events=[],
+                events=active_profile_events(profile, minute),
                 served=served,
                 generated=generated,
                 passenger_balance=balance,
@@ -1146,7 +1196,17 @@ def simulate_city(
             demand_scale=demand_scale,
             advisory_acceptance_rate=advisory_acceptance_rate,
             horizon_minutes=horizon_minutes,
+            **(
+                {
+                    "city_profile": city_profile,
+                    "requested_demand_scale": requested_demand_scale,
+                    "requested_advisory_acceptance_rate": requested_acceptance_rate,
+                }
+                if city_profile != "standard"
+                else {}
+            ),
         ),
+        **({"city_profile": profile.metadata()} if city_profile != "standard" else {}),
         evaluator=CITY_EVALUATOR,
         horizon_minutes=end,
         time_step_minutes=1,

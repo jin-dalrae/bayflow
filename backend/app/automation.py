@@ -40,21 +40,22 @@ def detect_failure(run):
         observation=dict(minute=minute,matured_intents=count,boarding_within_10_rate=round(rate,6),crowded_waiting_riders=sum(c['count'] for c in crowded),failure=bad)
         observations.append(observation)
         if consecutive>=MONITOR['consecutive_failures']:
-            return dict(source='backend_failure_monitor',monitor_version=MONITOR['version'],minute=minute,reason='Persistent mature journey-target or crowding failure across two measured checkpoints.',observations=observations[-2:],monitor=MONITOR,source_run_id=run['run_id'],harness_version=run['harness_version'])
+            return dict(source='backend_failure_monitor',monitor_version=MONITOR['version'],minute=minute,reason='Riders missed the 10-minute boarding target or faced crowding at two consecutive checks.',observations=observations[-2:],monitor=MONITOR,source_run_id=run['run_id'],harness_version=run['harness_version'])
     return None
 
 
-def operate(store,seed=42,iterations=3,use_llm=True,progress=lambda stage:None,scenario='city_commute',**parameters):
-    config=current_config(store,scenario=scenario)
+def operate(store,seed=42,iterations=3,use_llm=True,progress=lambda stage:None,scenario='city_commute',benchmark_scope=None,**parameters):
+    scope=benchmark_scope or (scenario if parameters.get("city_profile","standard")=="standard" else f"{scenario}:{parameters["city_profile"]}")
+    config=current_config(store,scenario=scope)
     progress('Monitoring passenger journeys with the current harness')
     observed=execute_run(store,config,seed,'evolving',scenario,**parameters)
     progress('Checking mature boarding deadlines and persistent crowding')
     trigger=detect_failure(observed)
-    record=dict(operation_id=str(uuid4()),scenario=scenario,scenario_parameters=parameters,observed_run_id=observed['run_id'],harness_version=config.version,automatic_trigger=trigger,monitor=MONITOR,created_at=now(),status='triggered' if trigger else 'healthy')
+    record=dict(benchmark_scope=scope,operation_id=str(uuid4()),scenario=scenario,scenario_parameters=parameters,observed_run_id=observed['run_id'],harness_version=config.version,automatic_trigger=trigger,monitor=MONITOR,created_at=now(),status='triggered' if trigger else 'healthy')
     store.put('automation_events',record['operation_id'],record)
     if trigger:
         progress(f"Automatic review triggered at simulation minute {trigger['minute']}")
-        result=evolve(store,seed,iterations,use_llm,progress,scenario=scenario,automatic_trigger=trigger,**parameters)
+        result=evolve(store,seed,iterations,use_llm,progress,scenario=scenario,automatic_trigger=trigger,benchmark_scope=scope,**parameters)
         record.update(status='completed',mutation_ids=[d['mutation_id'] for d in result['decisions']],final_harness_version=result['current']['version'])
     else:
         progress('Monitor passed; retaining harness without a mutation request')

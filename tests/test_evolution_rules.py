@@ -21,6 +21,22 @@ def rule(threshold=0.9):
     )
 
 
+def test_benchmark_scope_isolates_champion_and_records_frozen_controls():
+    store = Store(offline=True)
+    first_scope = "suite:first:standard"
+    second_scope = "suite:second:standard"
+    assert evolution.current_config(store, scenario=first_scope).version == "v1"
+    result = evolution.evolve(
+        store, iterations=1, use_llm=False, scenario="event_surge",
+        benchmark_scope=first_scope,
+    )
+    decision = result["decisions"][0]
+    assert decision["benchmark_scope"] == first_scope
+    assert decision["control_parameters"] == {}
+    assert evolution.current_config(store, scenario=second_scope).version == "v1"
+    assert store.get("mutation_proposals", decision["mutation_id"])["control_parameters"] == {}
+
+
 def test_recursive_diff_policy_rule_add_change_remove_and_identity():
     original = HarnessConfig()
     edited = HarnessConfig.model_validate(

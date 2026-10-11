@@ -143,7 +143,7 @@ def rule_plan(current, failure, history=None):
                 candidate["replanning_interval_minutes"] = max(5, current.replanning_interval_minutes - 10)
             else:
                 candidate["policy"]["urgent_wait_minutes"] = max(3, current.policy.urgent_wait_minutes - 1)
-            diagnosis = "Measured first-boarding target failures suggest local service allocation does not prioritize waiting travel intents across providers."
+            diagnosis = "Riders are missing the 10-minute first-boarding target; local service allocation does not prioritize waiting riders across providers."
             rationale = ("A slower service-frequency proposal was rejected; test faster replanning to act before deadlines within the same fleet and budget." if rejected_frequency else "Test shared service-frequency allocation and trigger urgent waits one minute earlier within unchanged resources and gross operating budget.")
         elif metrics.get("crowding_exposure_passenger_minutes", 0) > 0 and "passenger_advisory" not in current.active_tools:
             candidate.update(coordination_mode="regional", context_policy="regional_shared")

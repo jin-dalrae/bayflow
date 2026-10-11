@@ -43,6 +43,7 @@ def simulate(
     demand_scale=1.0,
     advisory_acceptance_rate=0.6,
     horizon_minutes=180,
+    city_profile="standard",
 ):
     config = (
         config if isinstance(config, HarnessConfig) else HarnessConfig(**(config or {}))
@@ -61,6 +62,7 @@ def simulate(
             demand_scale,
             advisory_acceptance_rate,
             horizon_minutes=horizon_minutes,
+            city_profile=city_profile,
         )
     rng = random.Random(seed)
     net = get_network()

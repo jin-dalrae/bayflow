@@ -5,7 +5,7 @@ const projectRoot=fileURLToPath(new URL('..',import.meta.url));
 const frontendRoot=fileURLToPath(new URL('.',import.meta.url));
 export default defineConfig({
  ...base,
- metadata:{atlasTest:false},
+ metadata:{atlasTest:false,isolatedFixture:true},
  timeout:180000,
  use:{...base.use,baseURL:'http://127.0.0.1:5180'},
  webServer:[

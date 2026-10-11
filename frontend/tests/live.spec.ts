@@ -4,7 +4,8 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?offline=true');
-  await expect(page.getByRole('heading', { name: 'One region. Four systems.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Who talks to whom.' })).toBeVisible();
+  await page.locator('.run-settings summary').click();
   await page.getByLabel('Transit scenario').selectOption('event_surge');
   await expect(page.locator('.station')).toHaveCount(21);
   await page.getByRole('checkbox', { name: 'Enable offline preview' }).check();
@@ -22,9 +23,11 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   expect(evolution.job_id).toBeTruthy();
   await expect(page.getByRole('button', { name: 'Evaluate manually' })).toBeEnabled();
   await expect(page.locator('.decision')).toHaveCount(2);
+  await expect(page.locator('.agent-flow .message-row')).not.toHaveCount(0);
+  await expect(page.locator('.agent-flow')).toContainText('Promotion gate');
   await expect(page.locator('.execution-history li')).not.toHaveCount(0);
   await expect(page.locator('.planner-label')).toContainText('Rule-based');
-  await expect(page.locator('.topology svg')).toContainText('REGIONAL COORDINATOR');
+  await expect(page.locator('.agent-diagram')).toContainText('Regional coordinator');
   await expect(page.locator('.persistence-panel')).toContainText('Preview records are held only in memory');
   const metricCells = page.locator('.table-row').filter({ hasText: 'Passenger delay' }).locator('b');
   for (const cell of await metricCells.all()) await expect(cell).not.toHaveText('—');
@@ -33,6 +36,7 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   await slider.press('End');
   for (let index = 0; index < 17; index++) await slider.press('ArrowLeft');
   await expect(page.locator('.agent-intervention')).not.toHaveCount(0);
+  await page.locator('.detail-section > summary', {hasText:'Full conversation log'}).click();
   await page.locator('.trace-observations summary').click();
   await expect(page.locator('.trace-observations pre')).toContainText('observe');
   await expect(page.locator('.trace-observations pre')).toContainText('muni_agent');
@@ -62,6 +66,7 @@ test('official Atlas baseline persists and exposes executable agent traces', asy
   await page.goto('/');
   await page.getByLabel('Transit scenario').selectOption('event_surge');
   await expect(page.locator('.db-pill')).toContainText('Atlas connected');
+  await page.locator('.run-settings summary').click();
   const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/simulation/run') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Run baseline' }).click();
   const {job_id} = await (await responsePromise).json();
@@ -113,6 +118,7 @@ test('city commute autonomously evolves, tracks ETA and exposes dedicated histor
   const scenarios = await (await page.request.get('/api/scenarios')).json();
   test.skip(!scenarios.some((scenario: any) => scenario.id === 'city_commute'), 'Restart the API with the city-commute simulation before running this test.');
   await expect(page.getByLabel('Transit scenario')).toHaveValue('city_commute');
+  await page.locator('.run-settings summary').click();
   await expect(page.getByLabel('Operating horizon')).toHaveValue('720');
   await page.getByLabel('Operating horizon').selectOption('180');
   const network = await (await page.request.get('/api/network?scenario=city_commute')).json();
@@ -132,6 +138,7 @@ test('city commute autonomously evolves, tracks ETA and exposes dedicated histor
   expect(job.result.frames.every((frame: any) => frame.passenger_balance.conserved)).toBe(true);
   await expect(page.locator('.service-levels')).toContainText('First transit boarding within 10 min');
   await expect(page.locator('.service-level-grid strong').first()).not.toHaveText('—');
+  await page.locator('.detail-section > summary', {hasText:'Passenger journeys'}).click();
   const firstGroup = job.result.passenger_groups[0];
   await page.getByLabel('Follow a passenger group').selectOption(firstGroup.cohort_id);
   await expect(page.locator('.journey-eta')).toContainText('Initial ETA');
@@ -139,14 +146,17 @@ test('city commute autonomously evolves, tracks ETA and exposes dedicated histor
   await page.screenshot({path:'test-results/bayflow-city-journey.png',fullPage:true});
   await page.getByLabel('Mutation planner').selectOption('rule_based');
   const evolutionResponse = page.waitForResponse(response => response.url().endsWith('/api/operations/start') && response.request().method() === 'POST');
-  await page.getByRole('button', {name:'Start autonomous operations'}).click();
+  await page.getByRole('button', {name:'Run autonomous simulation'}).click();
   const evolution = await (await evolutionResponse).json();
   expect(evolution.job_id).toBeTruthy();
-  await expect(page.getByRole('button', {name:'Start autonomous operations'})).toBeEnabled({timeout:180000});
+  await expect(page.getByRole('button', {name:'Run autonomous simulation'})).toBeEnabled({timeout:180000});
   const evolvedJob = await (await page.request.get(`/api/jobs/${evolution.job_id}`)).json();
   expect(evolvedJob.status).toBe('completed');
   expect(evolvedJob.result.automatic_trigger).toBeDefined();
   await expect(page.locator('.automatic-trigger')).toContainText('Automatic evolution trigger');
+  await expect(page.locator('.agent-flow')).toContainText('Service monitor');
+  await expect(page.locator('.diagram-caption .chat-line')).not.toHaveCount(0);
+  await expect(page.locator('.outcome')).toContainText(/PROMOTED|REJECTED/);
   expect(evolvedJob.result.decisions).toHaveLength(3);
   for(const decision of evolvedJob.result.decisions){
     expect(decision.evaluation_seeds).toHaveLength(5);
@@ -176,6 +186,7 @@ test('city commute autonomously evolves, tracks ETA and exposes dedicated histor
 
 test('twelve-hour operations replay crosses midnight with actual backend frames',async({page})=>{
  await page.goto('/?offline=true');
+ await page.locator('.run-settings summary').click();
  await expect(page.getByLabel('Operating horizon')).toHaveValue('720');
  await page.getByLabel('Passenger demand multiplier').fill('0.25');
  const responsePromise=page.waitForResponse(response=>response.url().endsWith('/api/simulation/run')&&response.request().method()==='POST');

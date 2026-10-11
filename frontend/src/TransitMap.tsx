@@ -56,7 +56,7 @@ export default function TransitMap({
   const [tileStatus, setTileStatus] = useState("Loading street map…");
   const [reference, setReference] = useState<Data | null>(null),
     [referenceError, setReferenceError] = useState(""),
-    [bus, setBus] = useState(true),
+    [bus, setBus] = useState(false),
     [rail, setRail] = useState(true),
     [bart, setBart] = useState(true),
     [routeFilter, setRouteFilter] = useState(""),
@@ -212,8 +212,8 @@ export default function TransitMap({
             : route.operator === "BART"
               ? 0.75
               : route.route_type === 3
-                ? 0.65
-                : 0.75,
+                ? 0.35
+                : 0.65,
         })
           .bindTooltip(
             tooltip(

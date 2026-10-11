@@ -85,6 +85,7 @@ class RunRequest(BaseModel):
     demand_scale: float = Field(default=1., ge=.25, le=3.)
     advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
     horizon_minutes: int = Field(default=720,ge=180,le=1440)
+    city_profile: Literal["standard","bus_driver_shortage","bart_interruption","stadium_exit","low_compliance","balanced_control"] = "standard"
 
 
 class EvolveRequest(BaseModel):
@@ -96,6 +97,7 @@ class EvolveRequest(BaseModel):
     demand_scale: float = Field(default=1., ge=.25, le=3.)
     advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
     horizon_minutes: int = Field(default=720,ge=180,le=1440)
+    city_profile: Literal["standard","bus_driver_shortage","bart_interruption","stadium_exit","low_compliance","balanced_control"] = "standard"
     scenario: Literal["event_surge", "commuter", "accident", "city_commute"] = "city_commute"
 
 
@@ -204,6 +206,7 @@ def health():
         ),
         "model_provider": os.getenv("LLM_PROVIDER", "auto"),
         "passenger_tracking": "cohort-events-v1",
+        "capabilities":{"automatic_reviews":True,"city_profiles":True,"evolution_history":True},
     }
 
 
@@ -220,6 +223,12 @@ def scenarios():
     return SCENARIOS
 
 
+@app.get("/city/scenarios")
+def city_scenarios():
+    from .city_scenarios import get_city_profiles
+    return get_city_profiles()
+
+
 @app.get("/database/status")
 def database_status(offline: bool = False):
     return select_store(offline, required=False).status()
@@ -233,7 +242,7 @@ def run_simulation(request: RunRequest):
         store,
         "simulation",
         lambda progress: execute_run(
-            store, config, request.seed, request.mode, request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes
+            store, config, request.seed, request.mode, request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes,city_profile=request.city_profile
         ),
     )
 
@@ -342,7 +351,7 @@ def start_operations(request:EvolveRequest):
     store=select_store(request.offline)
     if not evolution_lock.acquire(blocking=False):
         raise HTTPException(409,"Autonomous operations, evolution or rollback already in progress.")
-    return submit(store,"autonomous",lambda progress:operate(store,request.seed,request.iterations,request.use_llm,progress,scenario=request.scenario,demand_scale=request.demand_scale,advisory_acceptance_rate=request.advisory_acceptance_rate,horizon_minutes=request.horizon_minutes))
+    return submit(store,"autonomous",lambda progress:operate(store,request.seed,request.iterations,request.use_llm,progress,scenario=request.scenario,demand_scale=request.demand_scale,advisory_acceptance_rate=request.advisory_acceptance_rate,horizon_minutes=request.horizon_minutes,city_profile=request.city_profile))
 
 
 @app.get("/operations/history")
@@ -359,7 +368,7 @@ def harness_evolve(request: EvolveRequest):
         store,
         "evolution",
         lambda progress: evolve(
-            store, request.seed, request.iterations, request.use_llm, progress, scenario=request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes
+            store, request.seed, request.iterations, request.use_llm, progress, scenario=request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes,city_profile=request.city_profile
         ),
     )
 

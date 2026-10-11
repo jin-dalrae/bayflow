@@ -163,7 +163,7 @@ def current_config(store,scenario=None):
     key="active_harness" if scenario is None else f"active_harness:{scenario}"
     pointer = store.get("control",key)
     if not pointer:
-        historical=[v for v in store.list("harness_versions",limit=10000) if v.get("accepted") is True and v.get("scenario","event_surge")==scenario]
+        historical=[v for v in store.list("harness_versions",limit=10000) if v.get("accepted") is True and v.get("benchmark_scope",v.get("scenario","event_surge"))==scenario]
         pointer={"version":historical[-1]["version"] if historical else "v1","scenario":scenario}
         store.put("control",key,pointer)
     return HarnessConfig.model_validate(
@@ -303,6 +303,7 @@ def evolve(
     progress=lambda stage: None,
     scenario="city_commute",
     automatic_trigger=None,
+    benchmark_scope=None,
     **scenario_parameters,
 ):
     iterations = (
@@ -317,12 +318,17 @@ def evolve(
         from .city_simulator import CITY_EVALUATOR
 
         evaluator = CITY_EVALUATOR
-    current = current_config(store,scenario=scenario)
+    scope=benchmark_scope or (scenario if scenario_parameters.get("city_profile","standard")=="standard" else f"{scenario}:{scenario_parameters["city_profile"]}")
+    current = current_config(store,scenario=scope)
     original = current
     decisions = []
     eval_seeds = list(EVALUATION_SEEDS)
+    control_scenario = "city_commute" if scenario == "city_commute" else "commuter"
+    control_parameters = dict(scenario_parameters)
+    if scenario == "city_commute" and scenario_parameters.get("city_profile", "standard") != "standard":
+        control_parameters["city_profile"] = "balanced_control"
     for iteration in range(iterations):
-        progress(f"Analyzing failure traces · iteration {iteration+1}")
+        progress(f"Reviewing rider journey traces · iteration {iteration+1}")
         development = execute_run(
             store, current, seed, "evolving", scenario, **scenario_parameters
         )
@@ -338,7 +344,7 @@ def evolve(
                 "lesson": lessons.get(item["_id"], {}).get("lesson"),
             }
             for item in store.list("mutation_proposals", limit=1000)
-            if item.get("status") in ("promoted", "rejected") and item.get("scenario", "event_surge")==scenario
+            if item.get("status") in ("promoted", "rejected") and item.get("benchmark_scope",item.get("scenario", "event_surge"))==scope
         ][-current.memory_window_steps :]
         proposal, planner = propose(current, development, use_llm, history)
         versions = store.list("harness_versions", limit=10000)
@@ -358,11 +364,14 @@ def evolve(
             "status": "validated",
             "evaluation_seeds": eval_seeds,
             "control_seed": CONTROL_SEED,
+            "control_parameters":control_parameters,
+            "benchmark_scope":scope,
             "evaluator": evaluator,
             "config_diff": diff,
             "iteration": iteration + 1,
             "scenario": scenario,
             "automatic_trigger": automatic_trigger,
+            "benchmark_scope": scope,
             "scenario_parameters": scenario_parameters,
         }
         record["proposal"]["candidate"] = candidate.model_dump()
@@ -380,7 +389,6 @@ def evolve(
                         parameters=scenario_parameters,
                     )
                 )
-        control_scenario = "city_commute" if scenario == "city_commute" else "commuter"
         for config in (current, candidate):
             specs.append(
                 dict(
@@ -388,7 +396,7 @@ def evolve(
                     seed=CONTROL_SEED,
                     mode="evolving",
                     scenario=control_scenario,
-                    parameters=scenario_parameters,
+                    parameters=control_parameters,
                 )
             )
         runs = parallel_runs(store, specs, progress)
@@ -416,6 +424,8 @@ def evolve(
             "improvement_percent": improvement,
             "evaluation_seeds": eval_seeds,
             "control_seed": CONTROL_SEED,
+            "control_parameters":control_parameters,
+            "benchmark_scope":scope,
             "control_before": control_before["metrics"],
             "control_after": control_after["metrics"],
             "run_ids": [run["run_id"] for run in runs],
@@ -437,6 +447,7 @@ def evolve(
                 "accepted": accepted,
                 "evaluation_id": mutation_id,
                 "scenario": scenario,
+                "benchmark_scope": scope,
                 "evaluator_version": evaluator["version"],
                 "eligible": not store.offline,
                 "config_diff": diff,
@@ -478,7 +489,7 @@ def evolve(
                 "active_harness",
                 {"version": version, "evaluation_id": mutation_id},
             )
-            store.put("control", f"active_harness:{scenario}", {"version":version,"evaluation_id":mutation_id,"scenario":scenario,"evaluator_version":evaluator["version"]})
+            store.put("control", f"active_harness:{scope}", {"version":version,"evaluation_id":mutation_id,"scenario":scenario,"benchmark_scope":scope,"evaluator_version":evaluator["version"]})
             current = candidate
         lesson = {
             "scenario": scenario,

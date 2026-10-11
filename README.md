@@ -331,6 +331,23 @@ The hold executed 173 times for 237 hold minutes, from 586 triggers/9,796 evalua
 
 This is an explicitly **offline rule-based** experiment. It proves executable monitoring, mutation, evaluation and safe rejection; it does not prove a new city Gemini call or Atlas write. Twelve-hour playback also passed an actual API-backed browser check. Supported 24-hour duration remains an unmeasured performance setting, with synthetic overnight operations.
 
+## Artificial scenario proof protocol
+
+The scenario suite runs six immutable synthetic profiles: standard commute, route38 driver shortage, downtown BART interruption, fictional Mission Bay stadium exit, low voluntary-guidance uptake, and a balanced half-demand control. These are test conditions, not historical incidents. `GET /city/scenarios` exposes their assumptions/timelines.
+
+Each case starts from v1 with isolated champion/memory scope, monitors actual journeys, and independently evaluates up to three mutations using the same five paired promotion seeds and regression gate. The artifact preserves triggers, full candidate diffs, planner identity, operating-rule executions, remembered measured outcomes, acceptance/rejection, and static/fixed/final comparisons. Distinct tested hypotheses and feedback use are reported separately from qualifying improvement: a rejection cannot be presented as a performance gain.
+
+```bash
+# Organizer Atlas and configured model, with a fresh benchmark scope per case.
+.venv/bin/python scripts/scenario_suite.py --iterations 3 --cross-check --output demo/scenario-suite-atlas.json
+# Explicit artificial offline experiment; not Atlas/model proof.
+.venv/bin/python scripts/scenario_suite.py --offline --rule-based --iterations 3 --cross-check --output demo/scenario-suite-offline.json
+# Limit cases when time is short; suite defaults to180 minutes, not UI's720.
+.venv/bin/python scripts/scenario_suite.py --offline --rule-based --profiles bus_driver_shortage,bart_interruption,stadium_exit --iterations 3
+```
+
+The optional fresh-seed check freezes each final selected configuration and reruns it across profiles on seed9001. This seed is not used to propose/adopt mutations, and those results are never returned to the planner. One fresh seed is exploratory evidence, not a statistical generalization claim. A suite records partial results after each completed case and a visible failed status if execution or persistence fails.
+
 ## Historical Event Surge results
 
 [The preserved evaluation artifact](demo/evaluation-offline.json) contains actual rule-based planner results from a fresh offline seed-42, two-iteration run. Its UUIDs identify the executed offline runs; they are not Atlas document evidence. Both candidates were rerun under the fixed evaluator: neighbor coordination v2 improved mean promotion-suite objective only **0.83%** and was rejected; a subsequent regional shared-context v3 with 60-minute horizon and five-minute replanning improved it **22.23%** and was promoted. The planner selected this second mutation after observing residual failures and the previous rejection.
