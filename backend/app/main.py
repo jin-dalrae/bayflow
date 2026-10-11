@@ -32,6 +32,7 @@ evolution_lock = threading.Lock()
 pool = ThreadPoolExecutor(max_workers=2)
 
 SCENARIOS = [
+    {"id":"city_commute","name":"San Francisco Commute","description":"Synthetic afternoon travel intents across imported Muni bus/rail and BART connections; ten-minute boarding/ETA and crowding targets.","synthetic":True,"start_time":"16:00","end_time":"19:00"},
     {
         "id": "event_surge",
         "name": "The Bay Area Event Surge",
@@ -78,16 +79,21 @@ class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["static", "fixed", "evolving"] = "fixed"
     seed: int = Field(default=42, ge=0, le=1_000_000)
-    scenario: Literal["event_surge", "commuter", "accident"] = "event_surge"
+    scenario: Literal["event_surge", "commuter", "accident", "city_commute"] = "event_surge"
     offline: bool = False
+    demand_scale: float = Field(default=1., ge=.25, le=3.)
+    advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
 
 
 class EvolveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     seed: int = Field(default=42, ge=0, le=1_000_000)
-    iterations: int = Field(default=2, ge=1, le=4)
+    iterations: int = Field(default=3, ge=1, le=4)
     offline: bool = False
     use_llm: bool = True
+    demand_scale: float = Field(default=1., ge=.25, le=3.)
+    advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
+    scenario: Literal["event_surge", "commuter", "accident", "city_commute"] = "city_commute"
 
 
 class RollbackRequest(BaseModel):
@@ -107,21 +113,19 @@ def select_store(offline=False, required=True):
 
 
 def seed_store(store):
-    if store.get("scenarios", "event_surge"):
-        return
-    network = get_network()
-    for node in network["nodes"]:
-        store.put(
-            "transit_nodes", node["id"], dict(node, provenance=network["provenance"])
-        )
-    for edge in network["edges"]:
-        store.put(
-            "transit_connections",
-            edge["id"],
-            dict(edge, provenance=network["provenance"]),
-        )
+    if not store.get("scenarios", "event_surge"):
+        network = get_network()
+        store.put_many("transit_nodes", [dict(n, provenance=network["provenance"]) for n in network["nodes"]])
+        store.put_many("transit_connections", [dict(e, provenance=network["provenance"]) for e in network["edges"]])
     for scenario in SCENARIOS:
-        store.put("scenarios", scenario["id"], scenario)
+        if not store.get("scenarios", scenario["id"]):
+            store.put("scenarios", scenario["id"], scenario)
+    if not store.get("control", "city_network_seeded"):
+        from .city_network import get_city_network
+        city = get_city_network()
+        store.put_many("transit_nodes", [dict(n, scenario="city_commute", provenance=city["provenance"]) for n in city["nodes"]])
+        store.put_many("transit_connections", [dict(e, scenario="city_commute", provenance=city["provenance"]) for e in city["edges"]])
+        store.put("control", "city_network_seeded", {"nodes":len(city["nodes"]), "edges":len(city["edges"]), "provenance":city["provenance"]})
     current_config(store)
 
 
@@ -195,11 +199,15 @@ def health():
             or os.getenv("ANTHROPIC_API_KEY")
         ),
         "model_provider": os.getenv("LLM_PROVIDER", "auto"),
+        "passenger_tracking": "cohort-events-v1",
     }
 
 
 @app.get("/network")
-def network():
+def network(scenario: str = "event_surge"):
+    if scenario == "city_commute":
+        from .city_network import get_city_network
+        return get_city_network()
     return get_network()
 
 
@@ -221,7 +229,7 @@ def run_simulation(request: RunRequest):
         store,
         "simulation",
         lambda progress: execute_run(
-            store, config, request.seed, request.mode, request.scenario
+            store, config, request.seed, request.mode, request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate
         ),
     )
 
@@ -334,7 +342,7 @@ def harness_evolve(request: EvolveRequest):
         store,
         "evolution",
         lambda progress: evolve(
-            store, request.seed, request.iterations, request.use_llm, progress
+            store, request.seed, request.iterations, request.use_llm, progress, scenario=request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate
         ),
     )
 

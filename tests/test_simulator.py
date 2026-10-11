@@ -227,3 +227,43 @@ def test_each_operator_executes_real_priority_tool_when_enabled():
         assert trace["available_capacity"] >= edges[trace["edge_id"]]["capacity"]
         assert trace["operator"] == edges[trace["edge_id"]]["operator"]
     assert not simulate(mode="static")["traces"]
+
+
+def test_passenger_ledger_conserves_people_in_every_frame_and_demand_pair():
+    run = simulate(seed=42)
+    for frame in run['frames']:
+        balance = frame['passenger_balance']
+        assert balance['conserved']
+        assert balance['generated'] == sum(balance[k] for k in ('waiting', 'walking', 'riding', 'arrived'))
+        for flow in frame['passenger_flows']:
+            assert flow['generated'] == sum(flow[k] for k in ('waiting', 'walking', 'riding', 'arrived'))
+            assert all(flow[k] >= 0 for k in ('waiting', 'walking', 'riding', 'arrived'))
+        assert sum(f['generated'] for f in frame['passenger_flows']) == balance['generated']
+    assert run['frames'][-1]['passenger_balance']['arrived'] == run['metrics']['served_passengers']
+    # Adding observability must not change the measured baseline.
+    assert run['metrics']['objective'] == 0.305224
+
+
+def test_journey_events_prove_boarding_before_arrival_without_teleporting():
+    from collections import defaultdict
+    departures, alighted, arrived = defaultdict(int), defaultdict(int), defaultdict(int)
+    groups = {g['cohort_id']: g for g in simulate(seed=42)['passenger_groups']}
+    run = simulate(seed=42)
+    for frame in run['frames']:
+        for event in frame['passenger_events']:
+            group = groups[event['cohort_id']]
+            assert event['origin'] == group['origin'] and event['destination'] == group['destination']
+            assert event['minute'] >= group['born']
+            if event['action'] in ('boarded', 'walking'):
+                departures[(event['cohort_id'], event['vehicle_id'])] += event['count']
+            elif event['action'] == 'leg_arrival':
+                key = (event['cohort_id'], event['vehicle_id'])
+                alighted[key] += event['count']
+                assert alighted[key] <= departures[key]
+            elif event['action'] == 'arrived':
+                assert event['node'] == group['destination']
+                arrived[event['cohort_id']] += event['count']
+                assert arrived[event['cohort_id']] <= group['count']
+    assert sum(arrived.values()) == run['metrics']['served_passengers']
+    event_group = next(g for g in groups.values() if g['origin'] == 'chase')
+    assert arrived[event_group['cohort_id']] == event_group['count'] == 95

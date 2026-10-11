@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import TransitMap from "./TransitMap";
+import PassengerInspector from "./PassengerInspector";
+import { Rulebook, MutationDiff } from "./Rulebook";
 type Data = Record<string, any>;
 const colors: Record<string, string> = {
   muni: "#e9b168",
@@ -71,10 +73,13 @@ export default function App() {
     [frameIndex, setFrameIndex] = useState(0),
     [playing, setPlaying] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
+    [trackedPassenger, setTrackedPassenger] = useState<string | null>(null),
     [mode, setMode] = useState("fixed"),
     [seed, setSeed] = useState(42),
+    [demandScale, setDemandScale] = useState(1),
+    [advisoryAcceptance, setAdvisoryAcceptance] = useState(.6),
     [scenarios, setScenarios] = useState<Data[]>([]),
-    [scenario, setScenario] = useState("event_surge"),
+    [scenario, setScenario] = useState("city_commute"),
     [useLlm, setUseLlm] = useState(true);
   const alive = useRef(true);
   const requestGeneration = useRef(0);
@@ -82,7 +87,7 @@ export default function App() {
   const refresh = async () => {
     const generation = ++requestGeneration.current;
     const requests = [
-      ["/network", setNetwork],
+      [`/network?scenario=${encodeURIComponent(scenario)}`, setNetwork],
       [previewPath("/database/status"), setDb],
       [previewPath("/harness/current"), (d: Data) => setHarness(d.config || d)],
       [previewPath("/harness/versions"), (d: any) => setVersions(Array.isArray(d) ? d : d.versions || [])],
@@ -107,6 +112,7 @@ export default function App() {
     setJob(null);
     setPlaying(false);
     setFrameIndex(0);
+    setTrackedPassenger(null);
     void refresh();
     const t = setInterval(() => {
       const generation = requestGeneration.current;
@@ -119,12 +125,13 @@ export default function App() {
       requestGeneration.current++;
       clearInterval(t);
     };
-  }, [offline]);
+  }, [offline, scenario]);
+  const trackedPath: string[] = useMemo(()=>run?.passenger_groups?.find((group:Data)=>group.cohort_id===trackedPassenger)?.path || [],[run,trackedPassenger]);
   const frames: Data[] = run?.frames || [];
   const frame = frames[frameIndex] || {};
   const recordedTraces: Data[] = useMemo(() => (run?.traces || []).filter((trace: Data) => num(trace.minute) <= num(frame.minute)), [run, frame.minute]);
   const interventions = recordedTraces.filter(trace => trace.action !== "observe").slice(-6).reverse();
-  const activeDispatchEdges = new Set(recordedTraces.filter(trace => trace.action === "standby_dispatch" && num(trace.minute) === num(frame.minute)).map(trace => trace.edge_id));
+  const activeDispatchEdges = new Set(recordedTraces.filter(trace => trace.action === "standby_dispatch" && trace.tool !== "operating_rule" && num(trace.minute) === num(frame.minute)).map(trace => trace.edge_id));
   useEffect(() => {
     if (!playing || !frames.length) return;
     const t = setInterval(
@@ -144,6 +151,7 @@ export default function App() {
     setError("");
     setBusy(true);
     setPlaying(false);
+    setTrackedPassenger(null);
     setJob({ status: "pending", stage: "Starting real backend evaluation" });
     try {
       let d = await api(path, { ...body, offline });
@@ -231,6 +239,10 @@ export default function App() {
     ["congestion", "Denied boardings", ""],
     ["unserved_passengers", "Unserved passengers", ""],
     ["additional_operating_cost", "Extra operating cost · model units", ""],
+    ["boarding_within_10_minutes_rate", "First boarding within 10 min", "%"],
+    ["eta_within_10_minutes_rate", "Arrival within initial ETA + 10 min", "%"],
+    ["crowding_exposure_passenger_minutes", "Crowding exposure · passenger-min", ""],
+    ["regional_density_peak", "Peak regional queue density · people/m²", ""],
     ["objective", "Objective · lower is better", ""],
   ];
   const readMetric = (m: Data, key: string) =>
@@ -246,7 +258,7 @@ export default function App() {
     const v = readMetric(m, key);
     return key === "objective" && v !== undefined
       ? num(v).toFixed(4)
-      : key === "missed_transfer_rate" && v !== undefined
+      : key.endsWith("_rate") && v !== undefined
       ? `${fmt(num(v) * 100)}%`
       : fmt(v);
   };
@@ -303,12 +315,13 @@ export default function App() {
           <div className="scenario-control">
             <span className="control-label">SCENARIO</span>
             <select
+              aria-label="Transit scenario"
               value={scenario}
               onChange={(e) => setScenario(e.target.value)}
               disabled={busy}
             >
               {scenarios.length ? (
-                scenarios.map((s) => (
+                (scenarios.some(s=>s.id === "city_commute") ? scenarios : [{id:"city_commute",name:"San Francisco Commute"},...scenarios]).map((s) => (
                   <option
                     key={s.id || s.scenario_id}
                     value={s.id || s.scenario_id}
@@ -317,7 +330,7 @@ export default function App() {
                   </option>
                 ))
               ) : (
-                <option value="event_surge">The Bay Area Event Surge</option>
+                <><option value="city_commute">San Francisco Commute</option><option value="event_surge">The Bay Area Event Surge</option></>
               )}
             </select>
           </div>
@@ -345,7 +358,7 @@ export default function App() {
             className="secondary"
             disabled={busy}
             onClick={() =>
-              void launch("/simulation/run", { mode, seed, scenario })
+              void launch("/simulation/run", { mode, seed, scenario, demand_scale:demandScale, advisory_acceptance_rate:advisoryAcceptance })
             }
           >
             <Icon name="play" />
@@ -355,9 +368,12 @@ export default function App() {
             className="primary"
             disabled={busy}
             onClick={() => {
-              setScenario("event_surge");
+              
               void launch("/harness/evolve", {
                 seed,
+                scenario,
+                demand_scale: demandScale,
+                advisory_acceptance_rate: advisoryAcceptance,
                 iterations: 2,
                 use_llm: useLlm,
               });
@@ -370,7 +386,7 @@ export default function App() {
         </section>
         <div className="experiment-options">
           <span>
-            Evolution uses the fixed Event Surge benchmark and held-out seeds.
+            Evolution evaluates the selected scenario on fixed held-out seeds.
           </span>
           <label>
             Mutation planner{" "}
@@ -385,6 +401,7 @@ export default function App() {
             </select>
           </label>
         </div>
+        <div className="demand-controls"><label>Passenger demand <input aria-label="Passenger demand multiplier" type="number" min=".25" max="3" step=".25" value={demandScale} disabled={busy} onChange={e=>setDemandScale(num(e.target.value,1))}/><span>× scenario demand</span></label><label>Voluntary advice acceptance <input aria-label="Voluntary advice acceptance percentage" type="number" min="0" max="100" step="10" value={Math.round(advisoryAcceptance*100)} disabled={busy} onChange={e=>setAdvisoryAcceptance(num(e.target.value,60)/100)}/><span>% of simulated offers</span></label><small>Frozen before each run and shared by baseline, candidate, and held-out evaluations.</small></div>
         {!db.connected && (
           <div className="database-warning">
             <span>
@@ -433,14 +450,14 @@ export default function App() {
               </div>
             </div>
             <div className="map-wrap">
-              <TransitMap nodes={nodes} edges={edges} frame={frame} selected={selected} onSelect={setSelected} activeDispatchEdges={activeDispatchEdges} />
+              <TransitMap nodes={nodes} edges={edges} frame={frame} selected={selected} onSelect={setSelected} activeDispatchEdges={activeDispatchEdges} trackedGroup={trackedPassenger} trackedPath={trackedPath} />
               <div className="map-overlay">
                 <span className="small-caps">SAN FRANCISCO / REAL GEOGRAPHY</span>
                 <strong>{time(frame.minute ?? frame.time_minutes ?? 0)}</strong>
                 <span>
                   {frames.length
                     ? `Frame ${frameIndex + 1} / ${frames.length}`
-                    : "4:00 PM → 11:00 PM"}
+                    : `4:00 PM → ${time(scenario === "city_commute" ? 180 : 420)}`}
                 </span>
               </div>
               {(frame.events || []).length > 0 && (
@@ -502,10 +519,11 @@ export default function App() {
                   setFrameIndex(Number(e.target.value));
                 }}
               />
-              <span>11:00 PM</span>
+              <span>{time(run?.horizon_minutes ?? (scenario === "city_commute" ? 180 : 420))}</span>
               <span className="synthetic-tag">SYNTHETIC SCENARIO</span>
             </div>
-            <div className="event-strip">
+            <PassengerInspector run={run} frame={frame} nodes={nodes} edges={edges} selected={trackedPassenger} onSelect={setTrackedPassenger} onSeek={(minute)=>{setPlaying(false);const index=frames.findIndex(f=>f.minute>=minute);if(index>=0)setFrameIndex(index);}} />
+            <div className="event-strip">{scenario === "city_commute" ? <><div><i className="event-dot"/><b>4:00–7:00 PM</b><span>Rolling commuter intent</span></div><div><i className="event-dot blue"/><b>10 minute support</b><span>First boarding + initial ETA</span></div><div><i className="event-dot coral"/><b>Regional coordination</b><span>Queue density & crowding</span></div></> : <>
               <div>
                 <i className="event-dot" />
                 <b>5:20 PM</b>
@@ -520,11 +538,11 @@ export default function App() {
                 <i className="event-dot coral" />
                 <b>8:45 / 9:30 PM</b>
                 <span>Dual event surge</span>
-              </div>
+              </div></>}
             </div>
             <div className="agent-activity">
               <div className="activity-heading"><span className="small-caps">LIVE AGENT ACTIVITY</span><span>{recordedTraces.length} recorded decisions / observations by {time(frame.minute)}</span></div>
-              {interventions.length ? <ol>{interventions.map((trace, index) => <li className="agent-intervention" key={`${trace.minute}-${trace.agent}-${index}`}><time>{time(trace.minute)}</time><div><b>{String(trace.agent).replace(/_/g," ")}</b><span>{String(trace.action).replace(/_/g," ")}{trace.tool ? ` · ${trace.tool}` : ""}{trace.edge_id ? ` · ${trace.edge_id}` : ""}</span><small>{trace.rationale || `${fmt(trace.observed_queue)} observed passengers${trace.verification ? ` · ${trace.verification} verification` : ""}`}</small></div></li>)}</ol> : <p>No operational interventions recorded by this frame. Replay observations are available below.</p>}
+              {interventions.length ? <ol>{interventions.map((trace, index) => <li className="agent-intervention" key={`${trace.minute}-${trace.agent}-${index}`}><time>{time(trace.minute)}</time><div><b>{String(trace.agent || (trace.operator ? `${trace.operator} controller` : "harness interpreter")).replace(/_/g," ")}</b><span>{trace.tool === "operating_rule" ? `Rule ${trace.rule_id} fired → ${String(trace.action).replace(/_/g," ")} requested` : String(trace.action).replace(/_/g," ")}{trace.tool ? ` · ${trace.tool}` : ""}{trace.edge_id ? ` · ${trace.edge_id}` : ""}</span><small>{trace.tool === "operating_rule" ? `Observed signal ${fmt(trace.signal_value)} · feasibility-gated action; actual executions appear in rule telemetry.` : trace.action === "passenger_advisory" ? `${trace.requested_operator} ${trace.requested_service||''} → ${trace.alternative_operator} ${trace.alternative_service||''} · ${fmt(trace.accepted_count)}/${fmt(trace.offered_count)} accepted · alternative ETA ${time(trace.alternative_eta)} (estimated)` : trace.rationale || (trace.observed_queue !== undefined ? `${fmt(trace.observed_queue)} observed passengers${trace.verification ? ` · ${trace.verification} verification` : ""}` : "Recorded backend intervention")}</small></div></li>)}</ol> : <p>No operational interventions recorded by this frame. Replay observations are available below.</p>}
               {recordedTraces.length > 0 && <details className="trace-observations"><summary>Inspect recorded agent observations · latest {Math.min(40,recordedTraces.length)} traces</summary><pre>{JSON.stringify(recordedTraces.slice(-40), null, 2)}</pre></details>}
             </div>
           </section>
@@ -656,6 +674,7 @@ export default function App() {
                 )}
               </div>
             </div>
+            <Rulebook config={harness} run={run}/>
             <div className="evolution-state">
               <div className="state-heading">
                 <span className={"state-orb " + (busy ? "pulse" : "")} />
@@ -803,6 +822,7 @@ export default function App() {
                   <small>
                     {d.proposal?.diagnosis || d.proposal?.root_cause || ""}
                   </small>
+                  <MutationDiff decision={d} versions={versions}/>
                   <details>
                     <summary>Inspect proposal & evaluation</summary>
                     <pre>{JSON.stringify(d, null, 2)}</pre>

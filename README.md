@@ -8,6 +8,36 @@ BayFlow is an experimental recursive agent harness for a compact San Francisco t
 
 The technical contribution is the executable architecture evolution loop. The React interface makes that loop inspectable through a transit replay, agent topology, configuration changes, and recorded decisions.
 
+## The thesis: preserve the journey, change how the city serves it
+
+A commuter starts with an origin, a destination, a departure time, and an expected arrival. BayFlow's next experiment asks: **can coordinated service changes and voluntary route suggestions reduce crowding while helping more people board within ten minutes and arrive within ten minutes of their original ETA?**
+
+The supply side can place limited standby vehicles where queues need them and adjust modeled service frequency within a fixed resource budget. The demand side can suggest a less crowded valid route to a willing passenger. A suggestion must preserve the destination and predict arrival no more than ten minutes later than the original ETA. A passenger may decline; the system cannot force their route or redefine their deadline after they accept. Crowding labels are model indicators, not real safety alerts.
+
+The recursive part changes how the agents make those choices: which agents/tools they use, which stops and neighboring services they can observe, how far they plan ahead, and how often they reconsider. A fixed agent might repeatedly add a bus to the longest queue. An evolving harness can test a different coordination/context policy that considers downstream transfers and passenger alternatives, then retain it only if the measured journeys improve.
+
+**What is verified now:** the 21-node Event Surge simulator, passenger/queue/vehicle accounting, the real Gemini architecture mutation, matched-seed promotion/rejection, and official Atlas persistence. The broad map contains imported agency stops and shapes. **City Commute extension in progress:** an actual GTFS-connected graph has been constructed with 3,292 nodes and 8,369 directed transit/walking edges, including the selected Caltrain connector; its city demand, advisory actions, new evaluator, controls, and paired experiments are being implemented. No city improvement or ablation result is claimed yet. Historical Event Surge results below remain results from the compact model.
+
+The full hypothesis, manipulation limits, measurement definitions, and test plan are in [the experiment thesis](demo/THESIS.md). The two ten-minute targets are the current interpretation of the commuter goal; they are explicit experiment parameters, not a claim that all real journeys can meet them.
+
+## What counts as success in the City Commute experiment
+
+The proposed city evaluator separates three outcomes: whether passengers start their **first bus/rail ride within ten minutes** of departure; whether they arrive by their **original ETA plus ten minutes**; and how many passenger-minutes they spend queuing at modeled crowded stops. Walking does not count as first boarding. The original ETA is frozen before any intervention; accepting a different path does not reset it. Final rates divide by all generated passengers, including unserved passengers as failed targets. During playback, passengers whose deadline has not yet arrived remain pending rather than being presented as failures.
+
+Crowding uses a transparent model: queue length divided by an assumed stop queue area (bus 25 m², Metro 180 m², BART 400 m²). A density above 1.5 persons/m² triggers modeled crowding exposure. These areas and the threshold are synthetic assumptions, **not surveyed platform dimensions or a safety standard**. Global exposure and queue peaks must be inspected together: moving people to a different crowded stop does not establish success.
+
+The City Commute objective is a separately predefined `city-v2` experiment; it does not replace or retrospectively alter the existing `objective-v1` results:
+
+```text
+J_city = 0.35 × (1 − fraction first boarding within 10 minutes)
+       + 0.35 × (1 − fraction arriving by original ETA + 10 minutes)
+       + 0.20 × (crowding exposure passenger-minutes / (generated × 30))
+       + 0.10 × (max(0, net additional operating cost) / 20,000)
+       + 1,000 × unsafe or infeasible violations
+```
+
+The city candidate cannot change scoring weights, demand, deadline, compliance, density assumptions, or resource limits. Before a paired experiment, the participant will select demand scale and voluntary-advice acceptance (default 60%). Those settings remain identical across baseline and candidate runs. The extension's proposed fixed standby budget is 12 Muni bus, four Muni Metro, two BART, and one Caltrain vehicle/driver pairs across the network. These are synthetic scenario resources, not actual agency availability. City controls/results are not yet advertised as verified live endpoints.
+
 ## Run locally
 
 Requirements: Python 3.11+, Node.js 20+, npm, and the **organizer-provided MongoDB Atlas Sandbox URI**. Do not substitute a personal or newly created cluster for the official demo.

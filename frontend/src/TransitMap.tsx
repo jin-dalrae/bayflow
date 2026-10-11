@@ -9,6 +9,8 @@ type Props = {
   selected: string | null;
   onSelect: (id: string) => void;
   activeDispatchEdges: Set<string>;
+  trackedGroup: string | null;
+  trackedPath: string[];
 };
 const colors: Record<string, string> = {
   "Muni Bus": "#e9b168",
@@ -17,6 +19,8 @@ const colors: Record<string, string> = {
   Caltrain: "#df8290",
   walk: "#637b75",
 };
+const routePalette=['#e4b96b','#6fc5b8','#e18498','#96b8ee','#b99ae0','#cad477','#df9c65','#84c6de','#cfb0a0','#77b486'];
+const routeTint=(route:Data)=>{const label=String(route.short_name||route.service||route.id||'');const hash=Array.from(label).reduce((sum,c)=>sum+c.charCodeAt(0),0);return routePalette[hash%routePalette.length];};
 const tint = (operator: string) => colors[operator] || "#96b5a9";
 const location = (node: Data): L.LatLngTuple => [
   Number(node.lat),
@@ -40,6 +44,8 @@ export default function TransitMap({
   selected,
   onSelect,
   activeDispatchEdges,
+  trackedGroup,
+  trackedPath,
 }: Props) {
   const container = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -58,6 +64,12 @@ export default function TransitMap({
     [view, setView] = useState(0);
   const referenceLayer = useRef<L.LayerGroup | null>(null);
   const referenceRenderer = useRef<L.Canvas | null>(null);
+  const modelRenderer = useRef<L.Canvas | null>(null);
+  const city = nodes.length > 100;
+  const byEdge = useMemo(()=>Object.fromEntries(edges.map(e=>[e.id,e])),[edges]);
+  const byPair = useMemo(()=>Object.fromEntries(edges.map(e=>[`${e.source}|${e.target}`,e.id])),[edges]);
+  const trackedNodeIds = useMemo(()=>new Set(trackedPath.flatMap(id=>byEdge[id]?[byEdge[id].source,byEdge[id].target]:[])),[trackedPath,byEdge]);
+  const trackedPairs = useMemo(()=>new Set(trackedPath.flatMap(id=>byEdge[id]?[[byEdge[id].source,byEdge[id].target].sort().join('|')]:[])),[trackedPath,byEdge]);
   useEffect(() => {
     let alive = true;
     fetch("/data/transit-reference.json")
@@ -82,6 +94,7 @@ export default function TransitMap({
       const a = byId[edge.source],
         b = byId[edge.target];
       if (!a || !b) continue;
+      if (Array.isArray(edge.geometry) && edge.geometry.length > 1) { output[edge.id] = edge.geometry; continue; }
       let best = Infinity;
       let path: L.LatLngTuple[] = [location(a), location(b)];
       const routes = (reference?.routes || []).filter((r: Data) =>
@@ -147,6 +160,7 @@ export default function TransitMap({
     L.control.zoom({ position: "topright" }).addTo(m);
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(m);
     referenceRenderer.current = L.canvas({ padding: 0.2 });
+    modelRenderer.current = L.canvas({padding:.2});
     referenceLayer.current = L.layerGroup().addTo(m);
     network.current = L.layerGroup().addTo(m);
     dynamic.current = L.layerGroup().addTo(m);
@@ -184,22 +198,22 @@ export default function TransitMap({
             route.operator === "BART"
               ? route.color
               : route.route_type === 3
-                ? "#b68438"
-                : "#8173b5",
+                ? routeTint(route)
+                : "#a998e0",
           weight: routeFilter
             ? 5
             : route.operator === "BART"
               ? 3
               : route.route_type === 3
-                ? 1.5
-                : 2.5,
+                ? 2.2
+                : 2.8,
           opacity: routeFilter
             ? 0.95
             : route.operator === "BART"
               ? 0.75
               : route.route_type === 3
-                ? 0.45
-                : 0.7,
+                ? 0.65
+                : 0.75,
         })
           .bindTooltip(
             tooltip(
@@ -259,13 +273,18 @@ export default function TransitMap({
       const a = byId[edge.source],
         b = byId[edge.target];
       if (!a || !b) continue;
+      const inspectedRoute = reference?.routes.find((route:Data)=>route.id===routeFilter);
+      if(city && inspectedRoute && !trackedGroup && edge.route_id !== inspectedRoute.feed_route_id && edge.route_id !== inspectedRoute.id && edge.service !== inspectedRoute.short_name) continue;
       const key = [edge.source, edge.target].sort().join("|");
       if (seen.has(key)) continue;
       seen.add(key);
       L.polyline(segments[edge.id] || [location(a), location(b)], {
-        color: tint(edge.operator),
-        weight: edge.operator === "walk" ? 2 : 4,
-        opacity: 0.85,
+        renderer: city ? modelRenderer.current! : undefined,
+        color: city && edge.operator === 'Muni Bus' ? routeTint(edge) : tint(edge.operator),
+        weight: trackedPairs.has(key) ? 7 : edge.operator === "walk" ? 1.5 : city ? 1.6 : 4,
+        opacity: trackedGroup ? trackedPairs.has(key) ? 1 : .2 : city ? .55 : .85,
+        className: trackedPairs.has(key) ? "tracked-passenger-route" : "",
+
         dashArray: edge.operator === "walk" ? "4 6" : undefined,
       })
         .bindTooltip(
@@ -276,7 +295,13 @@ export default function TransitMap({
         )
         .addTo(layer);
     }
-  }, [nodes, edges, segments]);
+  }, [nodes, edges, segments, trackedGroup, trackedPath,city,trackedPairs,reference,routeFilter]);
+  useEffect(()=>{
+    if(!trackedGroup||!trackedPath.length||!map.current)return;
+    const ids=trackedNodeIds;
+    const points=nodes.filter(n=>ids.has(n.id)).map(location);
+    if(points.length)map.current.fitBounds(L.latLngBounds(points),{padding:[65,70],animate:false});
+  },[trackedGroup,trackedPath,nodes,trackedNodeIds]);
   useEffect(() => {
     const layer = dynamic.current;
     if (!layer) return;
@@ -294,12 +319,18 @@ export default function TransitMap({
           className: "dispatch-route",
         }).addTo(layer);
     }
-    for (const node of nodes) {
+    const bounds=map.current?.getBounds().pad(.2);
+    const visibleNodes=city ? nodes.filter(node=>bounds?.contains(location(node))).sort((a,b)=>Number(frame.queues?.[b.id]||0)-Number(frame.queues?.[a.id]||0)) : nodes;
+    let renderedMarkers=0;
+    for (const node of visibleNodes) {
       const q = Number(
         frame.queues?.[node.id]?.count ?? frame.queues?.[node.id] ?? 0,
       );
+      if(city && !q && selected!==node.id && !trackedNodeIds.has(node.id) && (renderedMarkers>=250 || (map.current?.getZoom()||0)<15)) continue;
+      renderedMarkers++;
       if (q > 0)
         L.circleMarker(location(node), {
+          renderer: city ? modelRenderer.current! : undefined,
           radius: Math.min(30, 8 + Math.sqrt(q) / 2),
           weight: 0,
           fillColor: q > 200 ? "#ff805b" : "#e9b168",
@@ -307,7 +338,8 @@ export default function TransitMap({
           interactive: false,
         }).addTo(layer);
       const marker = L.circleMarker(location(node), {
-        radius: selected === node.id ? 8 : 5,
+        renderer: city ? modelRenderer.current! : undefined,
+        radius: selected === node.id ? 8 : city ? 3.5 : 5,
         weight: 2,
         color: tint(node.operator),
         fillColor: "#11221e",
@@ -350,7 +382,7 @@ export default function TransitMap({
         b = byId[vehicle.target];
       if (!a || !b) continue;
       const t = Math.max(0, Math.min(1, Number(vehicle.progress) || 0));
-      const path = segments[`${vehicle.source}-${vehicle.target}`] || [
+      const path = segments[vehicle.edge_id || byPair[`${vehicle.source}|${vehicle.target}`]] || [
         location(a),
         location(b),
       ];
@@ -370,18 +402,20 @@ export default function TransitMap({
         }
         remaining -= lengths[i];
       }
+      const trackedCount=(vehicle.passenger_groups||[]).filter((g:Data)=>g.cohort_id===trackedGroup).reduce((n:number,g:Data)=>n+g.count,0);
       L.circleMarker(point, {
-        radius: 4,
+        renderer: city ? modelRenderer.current! : undefined,
+        radius: trackedCount ? 7 : 4,
         weight: 1,
-        color: "#10221c",
+        color: trackedCount ? "#fff" : "#10221c",
         fillColor: tint(vehicle.operator),
         fillOpacity: 1,
-        className: "sf-vehicle",
+        className: trackedCount ? "sf-vehicle tracked-passenger-vehicle" : "sf-vehicle",
       })
         .bindTooltip(
           tooltip(
             vehicle.operator,
-            `${vehicle.occupancy}/${vehicle.capacity} passengers · simulated vehicle`,
+            `${vehicle.occupancy}/${vehicle.capacity} passengers · simulated vehicle${trackedCount ? ` · ${trackedCount} from tracked group ${trackedGroup}` : ""}`,
           ),
         )
         .addTo(layer);
@@ -409,7 +443,7 @@ export default function TransitMap({
           }).addTo(layer);
       }
     }
-  }, [nodes, edges, frame, selected, activeDispatchEdges, segments]);
+  }, [nodes, edges, frame, selected, activeDispatchEdges, segments,trackedGroup,city,view,trackedNodeIds,byPair]);
   const fitRegion = () => {
     if (nodes.length)
       map.current?.fitBounds(L.latLngBounds(nodes.map(location)), {
@@ -470,7 +504,7 @@ export default function TransitMap({
         >
           San Francisco
         </button>
-        <button onClick={fitRegion}>Demo corridor</button>
+        <button onClick={fitRegion}>{city?'City network':'Demo corridor'}</button>
         <button
           onClick={() => {
             if (reference)
@@ -483,6 +517,7 @@ export default function TransitMap({
           Bay Area
         </button>
       </div>
+      <div className="sf-bus-shortcut"><button onClick={()=>{setBus(true);setRouteFilter('');map.current?.setView([37.767,-122.443],12,{animate:false});}}>Show all Muni bus lines ({busRoutes})</button><span>{bus&&!routeFilter?'All bus routes enabled':routeFilter?'Selected route only':'Bus layer hidden'} · {nodes.length.toLocaleString()} modeled stops</span></div>
       <details className="sf-layer-controls">
         <summary>
           Network layers · {reference ? reference.routes.length : "…"} routes
@@ -518,7 +553,7 @@ export default function TransitMap({
             value={routeFilter}
             onChange={(e) => chooseRoute(e.target.value)}
           >
-            <option value="">All reference routes</option>
+            <option value="">Show all routes · bus + rail</option>
             {reference?.routes.map((r: Data) => (
               <option key={r.id} value={r.id}>
                 {r.operator} {r.short_name} · {r.name}
@@ -557,8 +592,7 @@ export default function TransitMap({
         ))}
         <small>
           {reference?.stops.length.toLocaleString()} reference stops/stations.
-          Bus stops appear at zoom 14+. Highlighted stations carry simulation
-          demand.
+          Bus stops appear at zoom 14+. {city?'City queues and vehicles use this modeled network.':'Highlighted corridor stations carry simulated demand.'}
         </small>
         <a href="/data/ATTRIBUTION.md" target="_blank" rel="noreferrer">
           Data sources, snapshot dates and licenses

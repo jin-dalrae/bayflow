@@ -1,13 +1,15 @@
 """Atlas system of record. Offline store is explicit and never reports Atlas health."""
 
 import copy
+import json
+import zlib
 import os
 from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, ASCENDING, ReplaceOne
 import certifi
 
 load_dotenv()
@@ -126,6 +128,15 @@ class Store:
                 self.db[collection].replace_one({"_id": key}, doc, upsert=True)
         return doc
 
+    def put_many(self, collection, documents):
+        self.ensure()
+        docs=[dict(copy.deepcopy(d), _id=d["id"], created_at=now()) for d in documents]
+        with self.lock:
+            if self.offline:
+                self.memory[collection].update({d["_id"]:d for d in docs})
+            elif docs:
+                self.db[collection].bulk_write([ReplaceOne({"_id":d["_id"]},d,upsert=True) for d in docs],ordered=False)
+
     def get(self, collection, key):
         self.ensure()
         with self.lock:
@@ -134,7 +145,14 @@ class Store:
                 if self.offline
                 else self.db[collection].find_one({"_id": key})
             )
-            return copy.deepcopy(doc)
+            return self.decode_document(copy.deepcopy(doc)) if doc else None
+
+    @staticmethod
+    def decode_document(doc):
+        if doc.get("encoding") == "json-zlib-v1":
+            payload=json.loads(zlib.decompress(doc["payload"]))
+            return dict(payload, **{k:v for k,v in doc.items() if k not in ("payload","encoding")})
+        return doc
 
     def list(self, collection, query=None, limit=100):
         self.ensure()
@@ -145,10 +163,8 @@ class Store:
                     docs = [
                         d for d in docs if all(d.get(k) == v for k, v in query.items())
                     ]
-                return copy.deepcopy(docs[-limit:])
-            return list(
-                self.db[collection].find(query or {}).sort("created_at", 1).limit(limit)
-            )
+                return [self.decode_document(d) for d in copy.deepcopy(docs[-limit:])]
+            return [self.decode_document(d) for d in self.db[collection].find(query or {}).sort("created_at", 1).limit(limit)]
 
     def save_run(self, run):
         run_id = run["run_id"]
@@ -174,6 +190,11 @@ class Store:
                     self.put(collection, doc["_id"], doc)
         else:
             if frames:
+                # Lossless encoding keeps full city passenger proof in the shared sandbox.
+                if run.get("scenario")=="city_commute":
+                    frames=[dict(_id=f["_id"],run_id=run_id,minute=f["minute"],time=f["time"],created_at=f["created_at"],passenger_balance=f["passenger_balance"],encoding="json-zlib-v1",payload=zlib.compress(json.dumps(f,separators=(",",":")).encode(),6)) for f in frames]
+                    summary["frame_encoding"]="json-zlib-v1"
+                    summary["compressed_frame_bytes"]=sum(len(f["payload"]) for f in frames)
                 self.db.simulation_frames.insert_many(frames)
             if traces:
                 self.db.agent_traces.insert_many(traces)

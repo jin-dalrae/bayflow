@@ -35,7 +35,7 @@ def test_network_and_real_backend_generated_run():
 def test_evolution_progress_history_and_rollback():
     response = client.post(
         "/harness/evolve",
-        json={"offline": True, "use_llm": False, "iterations": 2, "seed": 42},
+        json={"offline": True, "use_llm": False, "iterations": 2, "seed": 42, "scenario":"event_surge"},
     )
     assert response.status_code == 202
     job = complete(response.json()["job_id"])

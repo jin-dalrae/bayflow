@@ -5,6 +5,7 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?offline=true');
   await expect(page.getByRole('heading', { name: 'One region. Four systems.' })).toBeVisible();
+  await page.getByLabel('Transit scenario').selectOption('event_surge');
   await expect(page.locator('.station')).toHaveCount(21);
   await page.getByRole('checkbox', { name: 'Enable offline preview' }).check();
   await page.getByLabel('Mutation planner').selectOption('rule_based');
@@ -50,6 +51,7 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
 test('official Atlas baseline persists and exposes executable agent traces', async ({ page }, testInfo) => {
   test.skip(testInfo.config.metadata.atlasTest !== true, 'Set BAYFLOW_TEST_ATLAS=1 or explicitly --grep "official Atlas" to run the organizer Atlas browser test.');
   await page.goto('/');
+  await page.getByLabel('Transit scenario').selectOption('event_surge');
   await expect(page.locator('.db-pill')).toContainText('Atlas connected');
   const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/simulation/run') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Run baseline' }).click();
@@ -74,6 +76,7 @@ test('official Atlas baseline persists and exposes executable agent traces', asy
 
 test('real geographic map loads agency bus lines and BART station coverage', async ({ page }) => {
   await page.goto('/?offline=true');
+  await page.getByLabel('Transit scenario').selectOption('event_surge');
   await expect(page.getByRole('region', { name: 'Interactive San Francisco street map with simulated transit' })).toBeVisible();
   await expect(page.locator('.station')).toHaveCount(21);
   await expect(page.locator('.sf-map-source')).toContainText('3,238 Muni stops · 50 BART stations');
@@ -93,4 +96,34 @@ test('real geographic map loads agency bus lines and BART station coverage', asy
   await page.locator('.sf-layer-controls summary').click();
   await expect.poll(() => page.locator('.leaflet-tile').evaluateAll(images => images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await page.locator('.map-wrap').screenshot({path:'test-results/bayflow-geographic.png'});
+});
+
+
+test('city commute tracks ten-minute support, reference ETA and full bus coverage', async ({ page }) => {
+  await page.goto('/?offline=true');
+  const scenarios = await (await page.request.get('/api/scenarios')).json();
+  test.skip(!scenarios.some((scenario: any) => scenario.id === 'city_commute'), 'Restart the API with the city-commute simulation before running this test.');
+  await expect(page.getByLabel('Transit scenario')).toHaveValue('city_commute');
+  const network = await (await page.request.get('/api/network?scenario=city_commute')).json();
+  expect(network.nodes.length).toBeGreaterThan(100);
+  await page.getByRole('button', { name: /Show all Muni bus lines/ }).click();
+  await expect(page.locator('.sf-bus-shortcut')).toContainText('All bus routes enabled');
+  const baselineResponse = page.waitForResponse(response => response.url().endsWith('/api/simulation/run') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Run baseline' }).click();
+  const baseline = await (await baselineResponse).json();
+  expect(baseline.job_id).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Evolve harness' })).toBeEnabled({timeout:120000});
+  const job = await (await page.request.get(`/api/jobs/${baseline.job_id}`)).json();
+  expect(job.status).toBe('completed');
+  expect(job.result.scenario).toBe('city_commute');
+  expect(job.result.metrics.boarding_within_10_minutes_rate).toBeGreaterThanOrEqual(0);
+  expect(job.result.metrics.eta_within_10_minutes_rate).toBeGreaterThanOrEqual(0);
+  expect(job.result.frames.every((frame: any) => frame.passenger_balance.conserved)).toBe(true);
+  await expect(page.locator('.service-levels')).toContainText('First transit boarding within 10 min');
+  await expect(page.locator('.service-level-grid strong').first()).not.toHaveText('—');
+  const firstGroup = job.result.passenger_groups[0];
+  await page.getByLabel('Follow a passenger group').selectOption(firstGroup.cohort_id);
+  await expect(page.locator('.journey-eta')).toContainText('Initial ETA');
+  await expect(page.locator('.tracked-journey')).not.toContainText('undefined');
+  await page.screenshot({path:'test-results/bayflow-city.png',fullPage:true});
 });

@@ -8,7 +8,7 @@ import pytest
 
 def test_actual_recursive_loop_rejects_then_promotes_and_persists():
     store = Store(offline=True)
-    result = evolve(store, seed=42, iterations=2, use_llm=False)
+    result = evolve(store, seed=42, iterations=2, use_llm=False, scenario="event_surge")
     assert [d["accepted"] for d in result["decisions"]] == [False, True]
     assert result["current"]["version"] == "v3"
     assert current_config(store).version == "v3"
@@ -41,7 +41,7 @@ def test_bad_candidate_is_never_promoted(monkeypatch):
 
     monkeypatch.setattr(evolution, "propose", no_change)
     store = Store(offline=True)
-    result = evolve(store, iterations=1, use_llm=False)
+    result = evolve(store, iterations=1, use_llm=False, scenario="event_surge")
     assert not result["decisions"][0]["accepted"]
     assert current_config(store).version == "v1"
     assert store.get("harness_versions", "v2")["accepted"] is False

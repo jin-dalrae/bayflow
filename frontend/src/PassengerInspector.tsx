@@ -1,0 +1,54 @@
+import { useMemo } from 'react';
+type Data = Record<string, any>;
+type Props = { run: Data | null; frame: Data; nodes: Data[]; edges: Data[]; selected: string | null; onSelect: (id: string) => void; onSeek: (minute: number) => void };
+const time = (m: number) => { const t = 960 + m; return `${Math.floor(t / 60) % 12 || 12}:${String(Math.round(t % 60)).padStart(2, '0')} PM`; };
+const amount = (v: any) => typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—';
+const rate = (v: any) => typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—';
+export default function PassengerInspector({ run, frame, nodes, edges, selected, onSelect, onSeek }: Props) {
+  const groups: Data[] = run?.passenger_groups || [], balance = frame.passenger_balance;
+  const group = groups.find(g => g.cohort_id === selected), minute = Number(frame.minute || 0);
+  const byNode = useMemo(() => Object.fromEntries(nodes.map(n => [n.id, n])), [nodes]);
+  const byEdge = useMemo(() => Object.fromEntries(edges.map(e => [e.id, e])), [edges]);
+  const name = (id: string) => byNode[id]?.name || id;
+  const allEvents: Data[] = useMemo(() => (run?.frames || []).flatMap((f: Data) => f.passenger_events || []), [run]);
+  const events = allEvents.filter(e => e.cohort_id === selected && e.minute <= minute);
+  const generated = events.filter(e => e.action === 'generated').reduce((n, e) => n + e.count, 0), arrived = events.filter(e => e.action === 'arrived').reduce((n, e) => n + e.count, 0);
+  let riding = 0, walking = 0;
+  for (const vehicle of frame.vehicles || []) {
+    const count = (vehicle.passenger_groups || []).filter((g: Data) => g.cohort_id === selected).reduce((n: number, g: Data) => n + g.count, 0);
+    if (vehicle.operator === 'walk') walking += count; else riding += count;
+  }
+  const waiting = generated - arrived - riding - walking;
+  const groupedEvents: Data[] = [];
+  for (const event of events) {
+    if (event.action === 'leg_arrival' && event.node === event.destination) continue;
+    const key = `${event.minute}:${event.action}:${event.node}:${event.target || ''}:${event.operator || ''}`;
+    const existing = groupedEvents.find(e => e.key === key);
+    if (existing) { existing.count += event.count; if (event.vehicle_id && !existing.vehicles.includes(event.vehicle_id)) existing.vehicles.push(event.vehicle_id); }
+    else groupedEvents.push({ ...event, key, vehicles: event.vehicle_id ? [event.vehicle_id] : [] });
+  }
+  const next = allEvents.find(e => e.cohort_id === selected && e.minute > minute)?.minute;
+  const firstGroup = groups.find(g => g.origin === 'chase') || groups.find(g => g.origin === 'oracle') || groups[0];
+  const firstBoard = events.find(e => e.action === 'boarded' && e.operator !== 'walk' && e.first_boarding !== false);
+  const arrivals = events.filter(e => e.action === 'arrived');
+  const reference = Number(group?.reference_arrival);
+  const etaOnTime = arrivals.filter(e => e.minute <= reference + 10).reduce((n, e) => n + e.count, 0);
+  const journeyNodes = group ? group.path.map((edgeId: string) => byEdge[edgeId]?.source).filter(Boolean).concat(group.destination) : [];
+  const service = frame.passenger_service || {};
+  const metrics = run?.metrics || {};
+  return <section className="passenger-proof" aria-label="Passenger movement proof">
+    <div className="activity-heading"><span className="small-caps">PASSENGER INTENT → BOARDING → ARRIVAL</span><span>{balance?.conserved ? '✓ Every passenger accounted for' : balance ? 'Passenger accounting mismatch' : 'Run a simulation to inspect journeys'}</span></div>
+    {run && <div className="service-levels"><div className="service-level-heading"><b>Ten-minute support & arrival reliability</b><span>Full-run measured results · synthetic demand</span></div><div className="service-level-grid">
+      <div><strong>{rate(metrics.boarding_within_10_minutes_rate)}</strong><span>First transit boarding within 10 min</span><small>All generated riders; unserved riders count as failures</small></div>
+      <div><strong>{rate(metrics.eta_within_10_minutes_rate)}</strong><span>Arrival within initial ETA + 10 min</span><small>Compared with frozen reference ETA; walking is not first boarding</small></div>
+      <div><strong>{amount(metrics.crowding_exposure_passenger_minutes)}</strong><span>Regional crowding exposure</span><small>Passenger-minutes of modeled queue exposure</small></div>
+      <div><strong>{amount(metrics.regional_density_peak)}</strong><span>Peak regional passenger density</span><small>People per modeled queue m²; synthetic areas</small></div>
+    </div>{service.intent_count !== undefined && <p className="service-frame-counts">At {time(minute)}: {amount(service.intent_count)} moving intents · {amount(service.boarded_within_10)} supported within 10 min · {amount(service.first_boarded)} first-boarded · {amount(service.eta_on_time_arrived)} on-time arrivals / {amount(service.arrived)} arrived.</p>}{service.advisory_offered !== undefined && <p className="service-frame-counts">Voluntary journey advice: {amount(service.advisory_offered)} offered · {amount(service.advisory_accepted)} accepted. Simulated travelers may decline a proposed alternative.</p>}{(service.crowded_locations||[]).length>0&&<details className="crowded-locations"><summary>Regional crowding · {service.crowded_locations.length} recorded queue locations</summary>{service.crowded_locations.slice(0,8).map((location:Data)=><div key={location.node}><span>{name(location.node)}</span><b>{amount(location.count)} queued · {amount(location.density)} people/m²</b></div>)}</details>}</div>}
+    {(frame.advisories||[]).length>0&&<details className="advisory-events" open><summary>Recorded voluntary route advice · {frame.advisories.length} offers at {time(minute)}</summary><div>{frame.advisories.slice(0,8).map((advice:Data,index:number)=><article key={advice.cohort_id||index}><div><b>{advice.requested_operator} {advice.requested_service||''} → {advice.alternative_operator} {advice.alternative_service||''}</b><span>{amount(advice.accepted_count)}/{amount(advice.offered_count)} accepted</span></div><p>{name(advice.origin||advice.node)} → {name(advice.destination)} · initial ETA {time(advice.initial_eta)} · estimated alternative ETA {time(advice.alternative_eta)}</p><small>{advice.message||advice.rationale} Realized arrival is tracked separately; accepting advice does not guarantee the forecast.</small></article>)}</div></details>}
+    {balance ? <><div className="passenger-counts">{[['generated', 'Generated'], ['waiting', 'Waiting'], ['walking', 'Walking'], ['riding', 'Riding'], ['arrived', 'Arrived']].map(([key, label]) => <div key={key} data-state={key}><b>{amount(balance[key])}</b><span>{label}</span></div>)}</div><p className="balance-equation">{amount(balance.generated)} generated = {amount(balance.waiting)} waiting + {amount(balance.walking)} walking + {amount(balance.riding)} riding + {amount(balance.arrived)} arrived</p></> : <p>Passenger counts and boarding/arrival events come from the backend. Older runs need to be rerun after restarting the updated API.</p>}
+    {groups.length > 0 && <><div className="journey-controls"><label>Follow a passenger group<select aria-label="Follow a passenger group" value={selected || ''} onChange={e => { onSelect(e.target.value); const g = groups.find(g => g.cohort_id === e.target.value); if (g) onSeek(g.born); }}><option value="">Select a journey…</option>{groups.map(g => <option key={g.cohort_id} value={g.cohort_id}>{time(g.born)} · {g.count} people · {name(g.origin)} → {name(g.destination)}</option>)}</select></label><button onClick={() => { onSelect(firstGroup.cohort_id); onSeek(firstGroup.born); }}>{run?.scenario === 'city_commute' ? 'Follow a commuter' : 'Follow event crowd'}</button></div>
+      {group && <div className="tracked-journey"><div className="journey-heading"><b>{name(group.origin)} → {name(group.destination)}</b><span>{group.count} simulated people · {group.cohort_id}{group.parent_intent?` · advised from ${group.parent_intent}`:''}</span></div><div className="journey-status">{arrived}/{group.count} arrived · {waiting} waiting · {walking} walking · {riding} riding</div><div className="journey-eta"><span>Moving intent <b>{time(group.born)}</b></span><span>First transit boarding <b>{firstBoard ? `${time(firstBoard.minute)} · ${firstBoard.minute - group.born} min after intent` : 'Not yet recorded'}</b></span><span>Initial ETA <b>{Number.isFinite(reference) ? time(reference) : 'Unavailable'}</b></span><span>ETA + 10 min target <b>{Number.isFinite(reference) ? time(reference + 10) : 'Unavailable'}</b></span><span>Actual arrivals <b>{arrivals.length ? `${time(arrivals[0].minute)} → ${time(arrivals[arrivals.length - 1].minute)}` : 'Not yet arrived'}</b></span><span>Arrived within ETA + 10 <b>{etaOnTime}/{arrived} recorded arrivals</b></span></div><p>Highlighted route: {journeyNodes.map(name).join(' → ')}</p><button disabled={next === undefined} onClick={() => next !== undefined && onSeek(next)}>Next journey step</button><ol className="passenger-journey-events">{groupedEvents.map(e => <li key={e.key}><time>{time(e.minute)}</time><span><b>{e.count} people</b> {e.action === 'generated' ? `start at ${name(e.node)}` : e.action === 'walking' ? `walk to ${name(e.target)}` : e.action === 'boarded' ? `board ${e.operator} toward ${name(e.target)}` : e.action === 'arrived' ? `reach their destination: ${name(e.node)}` : `reach ${name(e.node)}${e.operator === 'walk' ? '' : ` and alight from ${e.operator}`}`}{e.vehicles.length > 0 && <small title={e.vehicles.join(', ')}>{e.vehicles.length} recorded {e.operator === 'walk' ? 'walking leg' : 'vehicle'}{e.vehicles.length === 1 ? '' : 's'}</small>}</span></li>)}</ol>{!generated && <p>This group has not entered the simulation yet.</p>}</div>}
+      <details className="passenger-od"><summary>Origin → destination ledger · {(frame.passenger_flows || []).length} demand pairs at {time(minute)}</summary><div className="passenger-od-scroll"><table><thead><tr><th>From → to</th><th>Generated</th><th>Waiting</th><th>Traveling</th><th>Arrived</th></tr></thead><tbody>{(frame.passenger_flows || []).map((f: Data) => <tr key={`${f.origin}-${f.destination}`}><th>{name(f.origin)} → {name(f.destination)}</th><td>{f.generated}</td><td>{f.waiting}</td><td>{f.walking + f.riding}</td><td>{f.arrived}</td></tr>)}</tbody></table></div></details></>}
+    <small className="passenger-proof-note">Synthetic passenger demand on {nodes.length > 100 ? 'the selected city transit network' : 'the modeled corridor'}. Reference ETA uses the original service schedule. Counts and journey steps are recorded by the simulator; background GTFS routes are not live predictions. Density uses assumed queue areas: bus 25 m², Metro 180 m², BART 400 m². The crowding threshold of 1.5 people/m² is a simulation assumption, not a safety standard.</small>
+  </section>;
+}
