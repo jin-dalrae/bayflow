@@ -6,6 +6,7 @@ import { Rulebook, MutationDiff } from "./Rulebook";
 import AgentFlow, { buildLoopMessages } from "./AgentFlow";
 import AgentDiagram from "./AgentDiagram";
 import { narrate, agentName } from "./narrate";
+import { STATIC, endpoint } from "./snapshot";
 type Data = Record<string, any>;
 const colors: Record<string, string> = {
   muni: "#e9b168",
@@ -28,8 +29,9 @@ const time = (m: any) => {
   return `${Math.floor(t / 60) % 12 || 12}:${String(Math.floor(t % 60)).padStart(2, "0")} ${t >= 720 ? "PM" : "AM"}${day > 0 ? ` · day +${day}` : ""}`;
 };
 async function api(path: string, body?: Data) {
+  if (STATIC && body) throw Error("This is a static snapshot of stored Atlas records. Run BayFlow locally to start new simulations.");
   const r = await fetch(
-    `/api${path}`,
+    endpoint(path),
     body
       ? {
           method: "POST",
@@ -40,6 +42,7 @@ async function api(path: string, body?: Data) {
   );
   let d: any;
   try { d = await r.json(); } catch { throw Error(`Backend response unavailable for ${path}. Restart the backend with scripts/start.sh, then reload this page.`); }
+  if (STATIC && !r.ok) throw Error(`Not included in this static snapshot: ${path.split("?")[0]}`);
   if (r.status === 404 || r.status === 405) throw Error(`This backend does not support ${path.split("?")[0]}. Restart the backend with scripts/start.sh to load the current API, then reload this page.`);
   if (!r.ok)
     throw Error(
@@ -129,6 +132,19 @@ export default function App() {
     setTrackedPassenger(null);
     void refresh().then(async () => {
       // Start with the latest stored operating window so the map is moving on arrival.
+      if (STATIC) {
+        try {
+          const operation = await api(`/snapshot-operation?scenario=${encodeURIComponent(scenario)}`);
+          if (!alive.current) return;
+          setResult(operation);
+          setAction("operations");
+          if (operation.current) setHarness(operation.current.config || operation.current);
+          setRun(operation.replay);
+          setFrameIndex(0);
+          setPlaying(true);
+          return;
+        } catch {}
+      }
       try {
         const events: Data[] = await api(previewPath("/operations/history"));
         const latest = (Array.isArray(events) ? events : []).filter(e => e.scenario === scenario && e.observed_run_id).slice(-1)[0];
@@ -318,8 +334,8 @@ export default function App() {
           className={"db-pill " + (db.connected ? "connected" : "disconnected")}
         >
           <i />
-          {db.connected ? "Atlas connected" : "Atlas unavailable"}
-          <span>{db.connected ? `${count} records` : "Sandbox required"}</span>
+          {STATIC ? "Atlas snapshot" : db.connected ? "Atlas connected" : "Atlas unavailable"}
+          <span>{STATIC ? "read-only" : db.connected ? `${count} records` : "Sandbox required"}</span>
         </div>
       </header>
       {historyPage ? <EvolutionHistory offline={offline}/> : <main>
@@ -340,7 +356,7 @@ export default function App() {
               )}
             </select>
           </div>
-          <button className="primary" disabled={busy} onClick={() => void launch("/operations/start", { seed, scenario, demand_scale: demandScale, advisory_acceptance_rate: advisoryAcceptance, horizon_minutes: scenario === "city_commute" ? horizonMinutes : undefined, iterations: scenario === "city_commute" ? 3 : 2, use_llm: useLlm })}>
+          <button className="primary" disabled={busy || STATIC} onClick={() => void launch("/operations/start", { seed, scenario, demand_scale: demandScale, advisory_acceptance_rate: advisoryAcceptance, horizon_minutes: scenario === "city_commute" ? horizonMinutes : undefined, iterations: scenario === "city_commute" ? 3 : 2, use_llm: useLlm })}>
             <Icon name="evolve" />
             {busy ? "Agents working…" : "Run autonomous simulation"}
           </button>
@@ -348,25 +364,26 @@ export default function App() {
         <details className="run-settings">
           <summary>Settings · {useLlm ? "LLM planner" : "rule-based planner"} · seed {seed}{scenario === "city_commute" ? ` · ${horizonMinutes / 60} h` : ""}</summary>
           <div className="settings-grid">
-            <label>Mutation planner<select aria-label="Mutation planner" value={useLlm ? "llm" : "rule_based"} disabled={busy} onChange={(e) => setUseLlm(e.target.value === "llm")}><option value="llm">LLM with validated fallback</option><option value="rule_based">Rule-based · deterministic</option></select></label>
-            <label>Seed<input aria-label="Random seed" type="number" disabled={busy} value={seed} onChange={(e) => setSeed(num(e.target.value))} /></label>
-            {scenario === "city_commute" && <label>Operating horizon<select aria-label="Operating horizon" disabled={busy} value={horizonMinutes} onChange={e=>setHorizonMinutes(Number(e.target.value))}><option value={180}>3 hours</option><option value={720}>12 hours</option><option value={1440}>24 hours</option></select></label>}
-            <label>Passenger demand ×<input aria-label="Passenger demand multiplier" type="number" min=".25" max="3" step=".25" value={demandScale} disabled={busy} onChange={e=>setDemandScale(num(e.target.value,1))}/></label>
-            <label>Advice acceptance %<input aria-label="Voluntary advice acceptance percentage" type="number" min="0" max="100" step="10" value={Math.round(advisoryAcceptance*100)} disabled={busy} onChange={e=>setAdvisoryAcceptance(num(e.target.value,60)/100)}/></label>
+            <label>Mutation planner<select aria-label="Mutation planner" value={useLlm ? "llm" : "rule_based"} disabled={busy || STATIC} onChange={(e) => setUseLlm(e.target.value === "llm")}><option value="llm">LLM with validated fallback</option><option value="rule_based">Rule-based · deterministic</option></select></label>
+            <label>Seed<input aria-label="Random seed" type="number" disabled={busy || STATIC} value={seed} onChange={(e) => setSeed(num(e.target.value))} /></label>
+            {scenario === "city_commute" && <label>Operating horizon<select aria-label="Operating horizon" disabled={busy || STATIC} value={horizonMinutes} onChange={e=>setHorizonMinutes(Number(e.target.value))}><option value={180}>3 hours</option><option value={720}>12 hours</option><option value={1440}>24 hours</option></select></label>}
+            <label>Passenger demand ×<input aria-label="Passenger demand multiplier" type="number" min=".25" max="3" step=".25" value={demandScale} disabled={busy || STATIC} onChange={e=>setDemandScale(num(e.target.value,1))}/></label>
+            <label>Advice acceptance %<input aria-label="Voluntary advice acceptance percentage" type="number" min="0" max="100" step="10" value={Math.round(advisoryAcceptance*100)} disabled={busy || STATIC} onChange={e=>setAdvisoryAcceptance(num(e.target.value,60)/100)}/></label>
           </div>
           <div className="settings-benchmarks">
             <span>Benchmarks without the service monitor:</span>
-            <select className="mode-select" aria-label="Baseline mode" disabled={busy} value={mode} onChange={(e) => setMode(e.target.value)}><option value="fixed">Fixed agents</option><option value="static">Static timetable</option></select>
-            <button className="secondary" disabled={busy} onClick={() => void launch("/simulation/run", { mode, seed, scenario, demand_scale:demandScale, advisory_acceptance_rate:advisoryAcceptance, horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined })}><Icon name="play" />Run baseline</button>
-            <button className="secondary" disabled={busy} onClick={()=>void launch("/harness/evolve",{seed,scenario,demand_scale:demandScale,advisory_acceptance_rate:advisoryAcceptance,horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined,iterations:scenario === "city_commute" ? 3 : 2,use_llm:useLlm})}>Evaluate manually</button>
+            <select className="mode-select" aria-label="Baseline mode" disabled={busy || STATIC} value={mode} onChange={(e) => setMode(e.target.value)}><option value="fixed">Fixed agents</option><option value="static">Static timetable</option></select>
+            <button className="secondary" disabled={busy || STATIC} onClick={() => void launch("/simulation/run", { mode, seed, scenario, demand_scale:demandScale, advisory_acceptance_rate:advisoryAcceptance, horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined })}><Icon name="play" />Run baseline</button>
+            <button className="secondary" disabled={busy || STATIC} onClick={()=>void launch("/harness/evolve",{seed,scenario,demand_scale:demandScale,advisory_acceptance_rate:advisoryAcceptance,horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined,iterations:scenario === "city_commute" ? 3 : 2,use_llm:useLlm})}>Evaluate manually</button>
           </div>
         </details>
         {!db.connected && (
           <div className="database-warning">
             <span><b>MongoDB Atlas is not connected.</b> Official runs require the organizer sandbox. {db.error && <span className="db-error">{db.error}</span>}</span>
-            <label><input type="checkbox" disabled={busy} checked={offline} onChange={(e) => setOffline(e.target.checked)} />Enable offline preview</label>
+            <label><input type="checkbox" disabled={busy || STATIC} checked={offline} onChange={(e) => setOffline(e.target.checked)} />Enable offline preview</label>
           </div>
         )}
+        {STATIC && <div className="offline-banner">READ-ONLY SNAPSHOT · Stored MongoDB Atlas records from a live BayFlow run, including a Gemini-proposed harness that the gate promoted. New simulations need the local backend: <a href="https://github.com/jin-dalrae/bayflow">github.com/jin-dalrae/bayflow</a></div>}
         {offline && <div className="offline-banner">OFFLINE PREVIEW · memory-only persistence; does not satisfy the Atlas requirement.</div>}
         {error && <div role="alert" className="error">{error}<button onClick={() => setError("")}>×</button></div>}
         {harnessError&&<div className="database-warning" role="status">{harnessError}</div>}
@@ -418,7 +435,7 @@ export default function App() {
               <span>{time(run?.horizon_minutes ?? (scenario === "city_commute" ? horizonMinutes : 420))}</span>
             </div>
           </section>
-          <AgentDiagram loop={loop.rows} loopSource={loop.source} busy={busy} traces={shown?.traces || []} minute={num(frame.minute)} interval={num(harness.replanning_interval_minutes, 15)} harness={candidate?.config || harness} proposals={[...(result?.decisions || []), ...historicalDecisions]} time={time} edgeInfo={edgeInfo} nodeName={nodeName} />
+          <AgentDiagram loop={loop.rows} loopSource={loop.source} busy={busy} traces={shown?.traces || []} minute={num(frame.minute)} interval={num(harness.replanning_interval_minutes, 15)} harness={candidate?.config || harness} proposals={[...(result?.decisions || []), ...historicalDecisions.filter(d => !d.scenario || d.scenario === scenario)]} time={time} edgeInfo={edgeInfo} nodeName={nodeName} />
         </div>
         <div className="outcome panel">
               <span className="small-caps">OUTCOME</span>

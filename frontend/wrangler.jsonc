@@ -1,0 +1,11 @@
+{
+  // Static, read-only BayFlow: the built UI plus an exported Atlas snapshot (VITE_STATIC=1).
+  // Rebuild with: ../.venv/bin/python ../scripts/export_snapshot.py && VITE_STATIC=1 npm run build
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "bayflow",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

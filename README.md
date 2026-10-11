@@ -4,7 +4,7 @@
 
 BayFlow is a self-improving agent harness for San Francisco transit. Operator agents run a simulated commute on the real Muni/BART/Caltrain network. Harness agents watch how riders are served, propose a new operating architecture, test it on days it has never seen, and keep it only if it measurably wins. Every message, version and decision is stored in MongoDB Atlas.
 
-Public source: <https://github.com/jin-dalrae/bayflow> · Demo video: `output/bayflow-demo.mp4` (64 s, recorded from a live Atlas run)
+Live read-only demo: <https://bayflow.dalrae-jin-work.workers.dev> · Source: <https://github.com/jin-dalrae/bayflow> · Video: <https://youtu.be/IAYM_526A10>
 
 ## How it works
 
@@ -49,7 +49,8 @@ The cost term means one 90-unit standby bus run breaks even if about three more 
 
 ## Results so far
 
-- **City Commute (current, `city-intent-v3`):** in an offline Gemini run, the planner tried a transfer-hold rule (rejected, 1 of 5 days), then lowered the local dispatch trigger: **promoted, +3.25% on held-out days, 4 of 5 days won, control within 5%**. Its next change on top of v3 was rejected. On the seed-42 replay the evolved harness scores 0.206 vs 0.226 for fixed agents, and on-time boarding rises from 67.8% to 70.2%. Artifact: [demo/evaluation-city-v3-gemini-offline.json](demo/evaluation-city-v3-gemini-offline.json); an Atlas run is still to be recorded.
+- **City Commute on Atlas (`city-intent-v3`):** the service monitor triggered at 4:45 PM; Gemini lowered the local dispatch trigger and the gate **promoted v36 (+3.04% held-out, 5 of 5 days)**; two further Gemini changes on top of v36 were rejected. Seed-42 objective: 0.208 evolved vs 0.226 fixed agents. Artifact: [demo/autonomous-city-v3-atlas.json](demo/autonomous-city-v3-atlas.json).
+- **City Commute offline (`city-intent-v3`):** in an offline Gemini run, the planner tried a transfer-hold rule (rejected, 1 of 5 days), then lowered the local dispatch trigger: **promoted, +3.25% on held-out days, 4 of 5 days won, control within 5%**. Its next change on top of v3 was rejected. On the seed-42 replay the evolved harness scores 0.206 vs 0.226 for fixed agents, and on-time boarding rises from 67.8% to 70.2%. Artifact: [demo/evaluation-city-v3-gemini-offline.json](demo/evaluation-city-v3-gemini-offline.json); an Atlas run is still to be recorded.
 - **What changed to make evolution meaningful:** Gemini's structured output had been rejecting the schema (`maxItems`), so proposals silently fell back to rules; demand ended at only three downtown stops; candidates bundled about six changes; standby vehicles carried riders one segment and vanished; and v2's cost normalizer made every extra run a net loss. All five are fixed, and all earlier city results ran under those conditions (the demo video included).
 - **Event Surge (earlier compact scenario):** a real Gemini-plus-Atlas run promoted model-generated v4 with a 22.23% lower mean objective; a later fallback proposal regressed 14.26% and was rejected. Evidence: [demo/evaluation-gemini-atlas.json](demo/evaluation-gemini-atlas.json).
 
@@ -77,6 +78,15 @@ Headless runs:
 ```bash
 .venv/bin/python scripts/autonomous.py --iterations 3 --output demo/autonomous-city-atlas.json
 .venv/bin/python scripts/evaluate.py --scenario city_commute --horizon-minutes 180 --seed 42 --iterations 3
+```
+
+## Static deploy
+
+The live demo is the built UI plus a read-only export of the Atlas records, served by Cloudflare Workers static assets (no backend; Run is disabled there):
+
+```bash
+.venv/bin/python scripts/export_snapshot.py          # reads Atlas, writes frontend/public/snapshot/
+cd frontend && VITE_STATIC=1 npm run build && npx wrangler deploy
 ```
 
 ## Tests

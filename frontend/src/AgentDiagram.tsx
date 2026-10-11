@@ -86,8 +86,9 @@ export default function AgentDiagram({ loop, loopSource, busy, traces, minute, i
   const coordActive = (harness.active_agents || []).includes("regional_coordinator");
   const nodeStatus = (id: string) => {
     if (id === "coord" && !coordActive) {
-      const tried = proposals.filter(d => (d.candidate?.active_agents || []).includes("regional_coordinator")).map(d => d.candidate?.version).filter(Boolean);
-      return tried.length ? `Proposed in ${tried.slice(-1)[0]} · not approved yet` : `Not in ${harness.version || "v1"} yet`;
+      const tried = proposals.filter(d => (d.candidate?.active_agents || []).includes("regional_coordinator")).map(d => String(d.candidate?.version || "")).filter(Boolean)
+        .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      return tried.length ? `Proposed in ${tried[tried.length - 1]} · not approved yet` : `Not in ${harness.version || "v1"} yet`;
     }
     const nodeKind = node(id).kind;
     if (nodeKind === "harness") { const r = [...loop.slice(0, index + 1)].reverse().find(m => loopEdge(m)[1] === id); return r?.decision; }

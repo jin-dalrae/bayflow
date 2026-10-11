@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MutationDiff, Rulebook } from "./Rulebook";
+import { endpoint } from "./snapshot";
 type Data = Record<string, any>;
 export default function EvolutionHistory({ offline }: { offline: boolean }) {
   const [proposals, setProposals] = useState<Data[]>([]),
@@ -18,7 +19,7 @@ export default function EvolutionHistory({ offline }: { offline: boolean }) {
     Promise.allSettled(
       ["/harness/proposals", "/harness/versions", "/harness/evaluations"].map(
         async (path) => {
-          const response = await fetch(`/api${path}${query}`);
+          const response = await fetch(endpoint(`${path}${query}`));
           const data = await response.json();
           if (!response.ok)
             throw Error(
