@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 from .store import Store, now
+from .automation import operate
 from .network import get_network
 from .models import HarnessConfig
 from .evolution import current_config, execute_run, evolve
@@ -32,7 +33,7 @@ evolution_lock = threading.Lock()
 pool = ThreadPoolExecutor(max_workers=2)
 
 SCENARIOS = [
-    {"id":"city_commute","name":"San Francisco Commute","description":"Synthetic afternoon travel intents across imported Muni bus/rail and BART connections; ten-minute boarding/ETA and crowding targets.","synthetic":True,"start_time":"16:00","end_time":"19:00"},
+    {"id":"city_commute","name":"San Francisco Commute","description":"Synthetic afternoon travel intents across imported Muni bus/rail and BART connections; ten-minute boarding/ETA and crowding targets.","synthetic":True,"start_time":"16:00","end_time":"04:00 (+1 day)","default_horizon_minutes":720},
     {
         "id": "event_surge",
         "name": "The Bay Area Event Surge",
@@ -83,6 +84,7 @@ class RunRequest(BaseModel):
     offline: bool = False
     demand_scale: float = Field(default=1., ge=.25, le=3.)
     advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
+    horizon_minutes: int = Field(default=720,ge=180,le=1440)
 
 
 class EvolveRequest(BaseModel):
@@ -93,10 +95,12 @@ class EvolveRequest(BaseModel):
     use_llm: bool = True
     demand_scale: float = Field(default=1., ge=.25, le=3.)
     advisory_acceptance_rate: float = Field(default=.6, ge=0., le=1.)
+    horizon_minutes: int = Field(default=720,ge=180,le=1440)
     scenario: Literal["event_surge", "commuter", "accident", "city_commute"] = "city_commute"
 
 
 class RollbackRequest(BaseModel):
+    scenario: Literal["event_surge","commuter","accident","city_commute"] | None = None
     model_config = ConfigDict(extra="forbid")
     version: str = Field(pattern=r"^v[0-9]+$")
     offline: bool = False
@@ -118,7 +122,7 @@ def seed_store(store):
         store.put_many("transit_nodes", [dict(n, provenance=network["provenance"]) for n in network["nodes"]])
         store.put_many("transit_connections", [dict(e, provenance=network["provenance"]) for e in network["edges"]])
     for scenario in SCENARIOS:
-        if not store.get("scenarios", scenario["id"]):
+        if not store.get("scenarios", scenario["id"]) or (scenario["id"]=="city_commute" and store.get("scenarios", scenario["id"]).get("default_horizon_minutes")!=720):
             store.put("scenarios", scenario["id"], scenario)
     if not store.get("control", "city_network_seeded"):
         from .city_network import get_city_network
@@ -180,7 +184,7 @@ def submit(store, kind, operation):
                 except Exception:
                     pass
         finally:
-            if kind == "evolution":
+            if kind in ("evolution","autonomous"):
                 evolution_lock.release()
 
     pool.submit(worker)
@@ -204,10 +208,10 @@ def health():
 
 
 @app.get("/network")
-def network(scenario: str = "event_surge"):
+def network(scenario: str = "event_surge",horizon_minutes:int=720):
     if scenario == "city_commute":
         from .city_network import get_city_network
-        return get_city_network()
+        return get_city_network(horizon_minutes=horizon_minutes)
     return get_network()
 
 
@@ -224,12 +228,12 @@ def database_status(offline: bool = False):
 @app.post("/simulation/run", status_code=202)
 def run_simulation(request: RunRequest):
     store = select_store(request.offline)
-    config = current_config(store) if request.mode == "evolving" else HarnessConfig()
+    config = current_config(store,scenario=request.scenario) if request.mode == "evolving" else HarnessConfig()
     return submit(
         store,
         "simulation",
         lambda progress: execute_run(
-            store, config, request.seed, request.mode, request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate
+            store, config, request.seed, request.mode, request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes
         ),
     )
 
@@ -271,10 +275,10 @@ def get_run(run_id: str, offline: bool = False):
 
 
 @app.get("/harness/current")
-def harness_current(offline: bool = False):
+def harness_current(offline: bool = False,scenario: str | None = None):
     store = select_store(offline, required=False)
     try:
-        return current_config(store).model_dump()
+        return current_config(store,scenario=scenario).model_dump()
     except RuntimeError:
         return dict(
             HarnessConfig().model_dump(), persistence="unavailable", persisted=False
@@ -282,10 +286,10 @@ def harness_current(offline: bool = False):
 
 
 @app.get("/harness/versions")
-def harness_versions(offline: bool = False):
+def harness_versions(offline: bool = False,scenario: str | None = None):
     store = select_store(offline, required=False)
     try:
-        active = current_config(store).version
+        active = current_config(store,scenario=scenario).version
         return [
             dict(v, active=v["version"] == active)
             for v in store.list("harness_versions", limit=10000)
@@ -333,6 +337,19 @@ def harness_proposals(offline: bool = False):
         return []
 
 
+@app.post("/operations/start",status_code=202)
+def start_operations(request:EvolveRequest):
+    store=select_store(request.offline)
+    if not evolution_lock.acquire(blocking=False):
+        raise HTTPException(409,"Autonomous operations, evolution or rollback already in progress.")
+    return submit(store,"autonomous",lambda progress:operate(store,request.seed,request.iterations,request.use_llm,progress,scenario=request.scenario,demand_scale=request.demand_scale,advisory_acceptance_rate=request.advisory_acceptance_rate,horizon_minutes=request.horizon_minutes))
+
+
+@app.get("/operations/history")
+def operations_history(offline:bool=False):
+    return select_store(offline).list("automation_events",limit=1000)
+
+
 @app.post("/harness/evolve", status_code=202)
 def harness_evolve(request: EvolveRequest):
     store = select_store(request.offline)
@@ -342,7 +359,7 @@ def harness_evolve(request: EvolveRequest):
         store,
         "evolution",
         lambda progress: evolve(
-            store, request.seed, request.iterations, request.use_llm, progress, scenario=request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate
+            store, request.seed, request.iterations, request.use_llm, progress, scenario=request.scenario, demand_scale=request.demand_scale, advisory_acceptance_rate=request.advisory_acceptance_rate, horizon_minutes=request.horizon_minutes
         ),
     )
 
@@ -359,13 +376,16 @@ def harness_rollback(request: RollbackRequest):
         if version.get("accepted") is False:
             raise HTTPException(409, "Cannot activate a rejected candidate.")
         config = HarnessConfig.model_validate(version["config"])
-        previous = current_config(store)
+        if request.scenario and request.version != "v1" and version.get("scenario","event_surge") != request.scenario:
+            raise HTTPException(409,"Cannot activate a harness selected for another scenario.")
+        previous = current_config(store,scenario=request.scenario)
         decision_id = str(uuid4())
         store.put(
             "deployment_decisions",
             decision_id,
             {
                 "kind": "rollback",
+                "scenario": request.scenario,
                 "version": config.version,
                 "parent_version": previous.version,
                 "accepted": True,
@@ -377,6 +397,8 @@ def harness_rollback(request: RollbackRequest):
             "active_harness",
             {"version": config.version, "decision_id": decision_id},
         )
+        if request.scenario:
+            store.put("control",f"active_harness:{request.scenario}",{"version":config.version,"decision_id":decision_id,"scenario":request.scenario})
         return config.model_dump()
     finally:
         evolution_lock.release()

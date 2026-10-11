@@ -34,6 +34,7 @@ class Store:
         "agent_memory",
         "control",
         "jobs",
+        "automation_events",
     )
 
     def __init__(self, offline=False):

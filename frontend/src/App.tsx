@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import TransitMap from "./TransitMap";
+import EvolutionHistory from "./EvolutionHistory";
 import PassengerInspector from "./PassengerInspector";
 import { Rulebook, MutationDiff } from "./Rulebook";
 type Data = Record<string, any>;
@@ -20,8 +21,8 @@ const fmt = (v: any) =>
     ? "—"
     : num(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
 const time = (m: any) => {
-  const t = 960 + num(m);
-  return `${Math.floor(t / 60) % 12 || 12}:${String(t % 60).padStart(2, "0")} ${t >= 720 ? "PM" : "AM"}`;
+  const elapsed = 960 + num(m), day = Math.floor(elapsed / 1440), t = ((elapsed % 1440) + 1440) % 1440;
+  return `${Math.floor(t / 60) % 12 || 12}:${String(Math.floor(t % 60)).padStart(2, "0")} ${t >= 720 ? "PM" : "AM"}${day > 0 ? ` · day +${day}` : ""}`;
 };
 async function api(path: string, body?: Data) {
   const r = await fetch(
@@ -80,17 +81,20 @@ export default function App() {
     [advisoryAcceptance, setAdvisoryAcceptance] = useState(.6),
     [scenarios, setScenarios] = useState<Data[]>([]),
     [scenario, setScenario] = useState("city_commute"),
-    [useLlm, setUseLlm] = useState(true);
+    [useLlm, setUseLlm] = useState(true),
+    [horizonMinutes,setHorizonMinutes] = useState(720),
+    [historyPage,setHistoryPage] = useState(window.location.hash === "#history");
+  useEffect(()=>{const change=()=>setHistoryPage(window.location.hash === "#history");window.addEventListener("hashchange",change);return()=>window.removeEventListener("hashchange",change);},[]);
   const alive = useRef(true);
   const requestGeneration = useRef(0);
-  const previewPath = (p: string) => (offline ? `${p}?offline=true` : p);
+  const previewPath = (p: string) => (offline ? `${p}${p.includes("?") ? "&" : "?"}offline=true` : p);
   const refresh = async () => {
     const generation = ++requestGeneration.current;
     const requests = [
-      [`/network?scenario=${encodeURIComponent(scenario)}`, setNetwork],
+      [`/network?scenario=${encodeURIComponent(scenario)}&horizon_minutes=${horizonMinutes}`, setNetwork],
       [previewPath("/database/status"), setDb],
-      [previewPath("/harness/current"), (d: Data) => setHarness(d.config || d)],
-      [previewPath("/harness/versions"), (d: any) => setVersions(Array.isArray(d) ? d : d.versions || [])],
+      [previewPath(`/harness/current?scenario=${encodeURIComponent(scenario)}`), (d: Data) => setHarness(d.config || d)],
+      [previewPath(`/harness/versions?scenario=${encodeURIComponent(scenario)}`), (d: any) => setVersions(Array.isArray(d) ? d : d.versions || [])],
       ["/scenarios", (d: any) => setScenarios(Array.isArray(d) ? d : d.scenarios || [])],
       [previewPath("/harness/proposals"), (d: any) => setHistoricalDecisions(Array.isArray(d) ? d : d.proposals || [])],
     ] as const;
@@ -125,7 +129,7 @@ export default function App() {
       requestGeneration.current++;
       clearInterval(t);
     };
-  }, [offline, scenario]);
+  }, [offline, scenario, horizonMinutes]);
   const trackedPath: string[] = useMemo(()=>run?.passenger_groups?.find((group:Data)=>group.cohort_id===trackedPassenger)?.path || [],[run,trackedPassenger]);
   const frames: Data[] = run?.frames || [];
   const frame = frames[frameIndex] || {};
@@ -173,7 +177,7 @@ export default function App() {
       if (path.includes("rollback")) {
         setHarness(d.config || d.current || d);
         setJob({ status: "completed", stage: "Historical harness restored" });
-      } else if (path.includes("evolve")) {
+      } else if ((path.includes("evolve") || path.includes("operations/start"))) {
         setResult(d);
         if (d.current) setHarness(d.current.config || d.current);
         if (d.replay || d.run || d.evolved_run) {
@@ -271,9 +275,9 @@ export default function App() {
         </a>
         <span className="product-label">ADAPTIVE TRANSIT INTELLIGENCE</span>
         <nav>
-          <span className="nav-active">Operations lab</span>
+          <a className={!historyPage?"nav-active":""} href="#operations">Operations lab</a>
           <a href="#evaluation">Evaluation</a>
-          <a href="#audit">Architecture log</a>
+          <a className={historyPage?"nav-active":""} href="#history">Evolution history</a>
         </nav>
         <div
           className={"db-pill " + (db.connected ? "connected" : "disconnected")}
@@ -283,7 +287,7 @@ export default function App() {
           <span>{db.connected ? `${count} records` : "Sandbox required"}</span>
         </div>
       </header>
-      <main>
+      {historyPage ? <EvolutionHistory offline={offline}/> : <main>
         <div className="intro">
           <div>
             <div className="eyebrow">
@@ -358,7 +362,7 @@ export default function App() {
             className="secondary"
             disabled={busy}
             onClick={() =>
-              void launch("/simulation/run", { mode, seed, scenario, demand_scale:demandScale, advisory_acceptance_rate:advisoryAcceptance })
+              void launch("/simulation/run", { mode, seed, scenario, demand_scale:demandScale, advisory_acceptance_rate:advisoryAcceptance, horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined })
             }
           >
             <Icon name="play" />
@@ -369,24 +373,26 @@ export default function App() {
             disabled={busy}
             onClick={() => {
               
-              void launch("/harness/evolve", {
+              void launch("/operations/start", {
                 seed,
                 scenario,
                 demand_scale: demandScale,
                 advisory_acceptance_rate: advisoryAcceptance,
+                horizon_minutes: scenario === "city_commute" ? horizonMinutes : undefined,
                 iterations: scenario === "city_commute" ? 3 : 2,
                 use_llm: useLlm,
               });
             }}
           >
             <Icon name="evolve" />
-            {busy ? "Evaluating…" : "Evolve harness"}
+            {busy ? "Operating…" : "Start autonomous operations"}
             <span>↗</span>
           </button>
         </section>
+        <div className="manual-evaluation"><button className="secondary" disabled={busy} onClick={()=>void launch("/harness/evolve",{seed,scenario,demand_scale:demandScale,advisory_acceptance_rate:advisoryAcceptance,horizon_minutes:scenario === "city_commute" ? horizonMinutes : undefined,iterations:scenario === "city_commute" ? 3 : 2,use_llm:useLlm})}>Evaluate manually</button><span>Optional benchmark replay. Autonomous operations triggers evolution from actual performance.</span></div>
         <div className="experiment-options">
           <span>
-            Evolution evaluates the selected scenario on fixed held-out seeds.
+            Operations monitors measured failures and automatically evaluates harness changes on fixed held-out seeds.
           </span>
           <label>
             Mutation planner{" "}
@@ -401,7 +407,7 @@ export default function App() {
             </select>
           </label>
         </div>
-        <div className="demand-controls"><label>Passenger demand <input aria-label="Passenger demand multiplier" type="number" min=".25" max="3" step=".25" value={demandScale} disabled={busy} onChange={e=>setDemandScale(num(e.target.value,1))}/><span>× scenario demand</span></label><label>Voluntary advice acceptance <input aria-label="Voluntary advice acceptance percentage" type="number" min="0" max="100" step="10" value={Math.round(advisoryAcceptance*100)} disabled={busy} onChange={e=>setAdvisoryAcceptance(num(e.target.value,60)/100)}/><span>% of simulated offers</span></label><small>Frozen before each run and shared by baseline, candidate, and held-out evaluations.</small></div>
+        <div className="demand-controls">{scenario === "city_commute" && <label>Operating horizon <select aria-label="Operating horizon" disabled={busy} value={horizonMinutes} onChange={e=>setHorizonMinutes(Number(e.target.value))}><option value={180}>3 hours</option><option value={720}>12 hours</option><option value={1440}>24 hours</option></select></label>}<label>Passenger demand <input aria-label="Passenger demand multiplier" type="number" min=".25" max="3" step=".25" value={demandScale} disabled={busy} onChange={e=>setDemandScale(num(e.target.value,1))}/><span>× scenario demand</span></label><label>Voluntary advice acceptance <input aria-label="Voluntary advice acceptance percentage" type="number" min="0" max="100" step="10" value={Math.round(advisoryAcceptance*100)} disabled={busy} onChange={e=>setAdvisoryAcceptance(num(e.target.value,60)/100)}/><span>% of simulated offers</span></label><small>Frozen before each run and shared by baseline, candidate, and held-out evaluations.</small></div>
         {!db.connected && (
           <div className="database-warning">
             <span>
@@ -457,7 +463,7 @@ export default function App() {
                 <span>
                   {frames.length
                     ? `Frame ${frameIndex + 1} / ${frames.length}`
-                    : `4:00 PM → ${time(scenario === "city_commute" ? 180 : 420)}`}
+                    : `4:00 PM → ${time(scenario === "city_commute" ? horizonMinutes : 420)}`}
                 </span>
               </div>
               {(frame.events || []).length > 0 && (
@@ -519,7 +525,7 @@ export default function App() {
                   setFrameIndex(Number(e.target.value));
                 }}
               />
-              <span>{time(run?.horizon_minutes ?? (scenario === "city_commute" ? 180 : 420))}</span>
+              <span>{time(run?.horizon_minutes ?? (scenario === "city_commute" ? horizonMinutes : 420))}</span>
               <span className="synthetic-tag">SYNTHETIC SCENARIO</span>
             </div>
             <PassengerInspector run={run} frame={frame} nodes={nodes} edges={edges} selected={trackedPassenger} onSelect={setTrackedPassenger} onSeek={(minute)=>{setPlaying(false);const index=frames.findIndex(f=>f.minute>=minute);if(index>=0)setFrameIndex(index);}} />
@@ -674,6 +680,7 @@ export default function App() {
                 )}
               </div>
             </div>
+            {result?.automatic_trigger&&<details className="automatic-trigger" open><summary>Automatic evolution trigger</summary><pre>{JSON.stringify(result.automatic_trigger,null,2)}</pre></details>}
             <Rulebook config={harness} run={run}/>
             <div className="evolution-state">
               <div className="state-heading">
@@ -785,7 +792,7 @@ export default function App() {
             <div className="panel-heading">
               <div>
                 <span className="small-caps">MUTATION AUDIT TRAIL</span>
-                <h2>Every change earns its place.</h2>
+                <h2>Every change earns its place.</h2><a className="history-inline-link" href="#history">View complete evolution history ↗</a>
               </div>
               <span className="version-tag">
                 {decisionList.length} proposals
@@ -880,7 +887,7 @@ export default function App() {
                         v.accepted === false
                       }
                       onClick={() =>
-                        void launch("/harness/rollback", { version: c.version })
+                        void launch("/harness/rollback", { version: c.version, scenario })
                       }
                     >
                       {v.accepted === false ? "Rejected" : "↶ Restore"}
@@ -900,7 +907,7 @@ export default function App() {
           </span>
           <span>Real places. Synthetic demand. Reproducible decisions.</span>
         </footer>
-      </main>
+      </main>}
     </div>
   );
 }

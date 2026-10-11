@@ -8,15 +8,17 @@ BayFlow is an experimental recursive agent harness for San Francisco transit. It
 
 The technical contribution is the executable architecture evolution loop. The React interface makes that loop inspectable through a transit replay, agent topology, configuration changes, and recorded decisions.
 
+The latest conversation audit is [the requirement audit](demo/REQUIREMENT_AUDIT.md). Backend monitoring now triggers architecture review from measured journey failures, and the dedicated history page has passed actual API-backed browser checks. Twelve-hour simulation has passed conservation, capacity, clock-rollover, immutable-intent and all-four-operator tests; a 24-hour horizon is supported but is not a verified 24-hour performance benchmark. The saved city results below distinguish the original three-hour offline benchmark from new longer runs. New city Atlas/Gemini verification still needs network-enabled execution.
+
 ## The thesis: preserve the journey, change how the city serves it
 
-A commuter starts with an origin, a destination, a departure time, and an expected arrival. BayFlow's next experiment asks: **can coordinated service changes and voluntary route suggestions reduce crowding while helping more people board within ten minutes and arrive within ten minutes of their original ETA?**
+A commuter starts with an origin, a destination, a departure time, and an expected arrival. BayFlow's city experiment asks: **can coordinated service changes and voluntary route suggestions reduce crowding while helping more people board within ten minutes and arrive within ten minutes of their original ETA?**
 
 The supply side can place limited standby vehicles where queues need them and adjust modeled service frequency within a fixed resource budget. The demand side can suggest a less crowded valid route to a willing passenger. A suggestion must preserve the destination and predict arrival no more than ten minutes later than the original ETA. A passenger may decline; the system cannot force their route or redefine their deadline after they accept. Crowding labels are model indicators, not real safety alerts.
 
 The recursive part changes how the agents make those choices: which agents/tools they use, which stops and neighboring services they can observe, how far they plan ahead, and how often they reconsider. A fixed agent might repeatedly add a bus to the longest queue. An evolving harness can test a different coordination/context policy that considers downstream transfers and passenger alternatives, then retain it only if the measured journeys improve.
 
-**Implemented City Commute:** 3,292 nodes and 8,369 directed transit/walking edges, using actual GTFS stop sequences and service variants plus the selected derived Caltrain connector. A measured baseline exercises all 82 imported agency service records, including all 58 Muni bus routes. Demand, segment calendars, speeds, capacities, queue areas, consent, and resources remain synthetic. The one-minute simulator executes provider service changes, voluntary alternatives, and typed rules with passenger/queue/vehicle accounting. Its completed three-iteration offline evolution generated distinct hypotheses, executed and rejected all three, and retained v1; no qualifying city improvement is claimed. Real Gemini-plus-Atlas evidence below is historical Event Surge evidence, not proof of the new city run.
+**Implemented City Commute:** 3,292 nodes and 8,369 directed transit/walking edges, using actual GTFS stop sequences and service variants plus the selected derived Caltrain connector. The original three-hour baseline exercises all 82 imported agency service records, including all 58 Muni bus routes. The twelve-hour test additionally boards 61 synthetic Caltrain riders, producing 83 active service IDs; all 61 arrive, with 183 directed-leg boarding events. Demand, segment calendars, speeds, capacities, queue areas, consent, and resources remain synthetic. The one-minute simulator executes provider service changes, voluntary alternatives, and typed rules with passenger/queue/vehicle accounting. Its completed three-iteration offline evolution generated distinct hypotheses, executed and rejected all three, and retained v1; no qualifying city improvement is claimed. Real Gemini-plus-Atlas evidence below is historical Event Surge evidence, not proof of the new city run.
 
 The full hypothesis, manipulation limits, measurement definitions, and test plan are in [the experiment thesis](demo/THESIS.md). The two ten-minute targets are the current interpretation of the commuter goal; they are explicit experiment parameters, not a claim that all real journeys can meet them.
 
@@ -140,7 +142,7 @@ flowchart LR
 
 Harness v1 has independent Muni, BART, and Caltrain agents, local dispatch tooling, a 30-minute horizon, a 15-minute replanning interval, local-only context, six memory steps, basic verification, and local-greedy optimization. It is functional but has limited regional coordination.
 
-The schema permits only known agents and tools, bounded horizon/replanning/memory parameters, and enumerated coordination/context/verification/strategy values. Companion-agent requirements constrain regional coordination and forecasting. The planner changes this configuration rather than generating executable code. Evaluator weights and scenario parameters are outside the harness mutation surface.
+The schema permits only known agents and tools, bounded horizon/replanning/memory parameters, and enumerated coordination/context/verification/strategy values. Companion-agent requirements constrain regional coordination and forecasting. The planner changes this configuration rather than generating executable code. Evaluator weights and scenario parameters are outside the harness mutation surface. City planning excludes unimplemented demand-forecast agents/tools and a distinct predictive strategy; unsupported proposals fail validation. Feasibility is enforced independently of tool flags. Current champions and useful outcome lessons are scoped by scenario, so a historical Event Surge promotion is not silently treated as a city champion.
 
 Every iteration diagnoses measured failures, creates a proposal, validates it, evaluates the candidate against its incumbent on matched scenarios/seeds, and records the resulting acceptance or rejection. A favorable prediction from a planner never counts as measured improvement. Historical versions can be inspected and explicitly rolled back.
 
@@ -221,19 +223,32 @@ cd frontend
 npm run build
 ```
 
-Latest local validation passed **43 tests with three external checks skipped**, TypeScript checking, and the Vite build. The publishable-file scan found no actual credentials; `.env` remains untracked. Historical milestones additionally verified real Event Surge Atlas write/read, a real Gemini 3.8 Flash proposal, and live browser integration. Those historical external checks do not establish new city integration. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
+Latest local validation passed **56 tests with three external checks skipped**, TypeScript checking, and the Vite build. The publishable-file scan found no actual credentials; `.env` remains untracked. Historical milestones additionally verified real Event Surge Atlas write/read, a real Gemini 3.8 Flash proposal, and live browser integration. Three current API-backed preview browser checks passed, including autonomous city review and refreshed history; one Atlas browser check was explicitly skipped. Those historical external checks do not establish new city integration. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
 
 Run the entire recursive loop without a browser (official Sandbox required):
 
 ```bash
-.venv/bin/python scripts/evaluate.py --scenario city_commute --seed 42 --iterations 3 --output demo/evaluation-city-rules-atlas.json
+.venv/bin/python scripts/evaluate.py --scenario city_commute --horizon-minutes 180 --seed 42 --iterations 3 --output demo/evaluation-city-rules-atlas.json
 # Reproducible rule-based planner; still uses Atlas by default.
 .venv/bin/python scripts/evaluate.py --scenario city_commute --rule-based --seed 42 --iterations 3
 # Explicit isolated preview, with no database eligibility claim.
-.venv/bin/python scripts/evaluate.py --scenario city_commute --offline --rule-based --seed 42 --iterations 3 --output demo/evaluation-city-rules-offline.json
+.venv/bin/python scripts/evaluate.py --scenario city_commute --horizon-minutes 180 --offline --rule-based --seed 42 --iterations 3 --output demo/evaluation-city-rules-offline.json
 # Preserve the historical compact scenario when that is what you intend to evaluate.
 .venv/bin/python scripts/evaluate.py --scenario event_surge --seed 42 --iterations 2
 ```
+
+City API/UI/CLI requests default to **720 simulation minutes** (16:00–04:00 next day), with an allowed 180–1,440-minute range. Specify `--horizon-minutes 180` to reproduce the preserved three-hour benchmark; horizons remain frozen across paired evaluations. Overnight service is synthetic: actual agency closing hours and complete GTFS calendars are not modeled.
+
+To let the backend decide whether evolution is needed, start monitored operations rather than issuing an evolve command:
+
+```bash
+# Official Sandbox and configured model by default.
+.venv/bin/python scripts/autonomous.py --iterations 3 --output demo/autonomous-city-atlas.json
+# Explicit isolated twelve-hour proof; no Atlas eligibility claim.
+.venv/bin/python scripts/autonomous.py --offline --rule-based --iterations 3 --output demo/autonomous-city-12h-offline.json
+```
+
+The monitor checks matured boarding deadlines and crowding every 15 simulation minutes. It requires at least 200 matured intents and two consecutive failing checkpoints before requesting review; healthy operations retain the harness without a proposal. Thresholds are outside the mutation surface. The observed run completes first; the monitor scans its ordered observations and identifies the first failure using only data available at that checkpoint. Candidates then rerun complete matched scenarios. This is a bounded monitored experiment, not live mid-journey hot swapping or a permanently running production dispatcher. Trigger observations and source-run IDs persist with proposals and automation records.
 
 The CLI prints real stage updates to stderr and measured results to stdout. `--output` saves the summary, not a video or proof of external publication. Repeated Atlas runs start from the current persisted harness; inspect version history or roll back to v1 when you need a fresh v1 comparison. Rollback records a decision; rejected candidates cannot be activated.
 
@@ -243,12 +258,14 @@ The CLI prints real stage updates to stderr and measured results to stdout. `--o
 | --- | --- |
 | `GET /health` | Process status, Atlas status, configured-model indicator |
 | `GET /network` / `GET /scenarios` | Curated graph and scenario definitions |
-| `POST /simulation/run` | Enqueue real simulation (`mode`, `seed`, `scenario`) |
+| `POST /simulation/run` | Enqueue real simulation (`mode`, `seed`, `scenario`, `horizon_minutes`) |
 | `GET /jobs/{job_id}` | Actual job status, stage history, result or failure |
 | `GET /simulation/{run_id}` | Persisted summary, frames, and traces |
 | `GET /simulation/{run_id}/frames` | Replay frames from persistence |
-| `GET /harness/current` / `GET /harness/versions` | Active configuration and version history |
+| `GET /harness/current` / `GET /harness/versions` | Active configuration and versions; `scenario` scopes the champion |
 | `POST /harness/evolve` | Enqueue candidate planning and independent evaluations |
+| `POST /operations/start` | Run the backend monitor; evolve only after a measured failure trigger |
+| `GET /operations/history` | Persisted monitor/trigger/operation history |
 | `GET /harness/evaluations` | Persisted evaluation/gate results |
 | `GET /harness/proposals` | Persisted proposal/configuration/evaluation audit history |
 | `POST /harness/rollback` | Activate a prior accepted version and audit the decision |
@@ -267,10 +284,10 @@ curl -sS -X POST http://127.0.0.1:8000/harness/evolve \
 # Substitute the actual returned job_id; poll until completed or failed.
 curl -sS http://127.0.0.1:8000/jobs/ACTUAL_JOB_ID
 curl -sS -X POST http://127.0.0.1:8000/harness/rollback \
-  -H 'Content-Type: application/json' -d '{"version":"v1"}'
+  -H 'Content-Type: application/json' -d '{"version":"v1","scenario":"city_commute"}'
 ```
 
-Long-running operations return HTTP 202 with a job ID. Polling `/jobs` reflects backend progress rather than cosmetic frontend stages. Only one evolution/rollback can run at once. An explicit request `offline:true` selects in-memory preview; historical query endpoints accept `?offline=true` for that store. Preview data disappears when the process exits. Job results are available in the running process; after restart inspect persisted run/evaluation endpoints instead.
+Long-running operations return HTTP 202 with a job ID. Polling `/jobs` reflects backend progress rather than cosmetic frontend stages. Only one autonomous review, evolution, or rollback can run at once. An explicit request `offline:true` selects in-memory preview; historical query endpoints accept `?offline=true` for that store. Preview data disappears when the process exits. Job results are available in the running process; after restart inspect persisted run/evaluation endpoints instead.
 
 ## City evidence and verification status
 
@@ -297,6 +314,22 @@ All modes generated **9,761 passengers**. The selected champion remains v1, so i
 | Additional operating cost, model units | 0 | 5,940 |
 
 These are synthetic-model measurements, not observed San Francisco performance. The recursive mechanism worked, but the tested city mutations did **not** clear its promotion gate. An earlier trial exposed a repeated-fallback proposal bug; the final artifact reflects the corrected distinct hypotheses. New city Gemini-plus-Atlas verification is currently blocked by network access in this session; run the documented Atlas command in a network-enabled terminal. Do not relabel historical Event Surge database/model proof as a successful city evaluation. Supply/guidance ablations and acceptance sweeps are not claimed complete.
+
+## Verified twelve-hour autonomous experiment
+
+[The actual twelve-hour offline artifact](demo/autonomous-city-12h-offline.json) records backend-triggered review without a separate evolve command. The monitor found persistent failure at **16:45 (minute 45)**: the preceding checkpoints contained 1,979 and 2,852 matured intents, boarding success 62.0515% and 59.0813%, and 286/315 modeled crowded waiting riders. Its decision used checkpoint observations, not future passenger outcomes.
+
+The three candidate hypotheses were actually evaluated on five matched seeds and all rejected:
+
+| Hypothesis | Mean objective improvement | Seeds improved | Decision |
+| --- | ---: | ---: | --- |
+| Neighbor context and incoming-transfer hold | −13.252378% | 0 / 5 | Retain v1 |
+| Regional frequency and earlier urgent wait | −16.931192% | 0 / 5 | Retain v1 |
+| Regional frequency and faster replanning | −8.277596% | 0 / 5 | Retain v1 |
+
+The hold executed 173 times for 237 hold minutes, from 586 triggers/9,796 evaluations, affecting 8,388 rider events. Seed42 generated **18,315 passengers** across 83 active service IDs; the selected Caltrain connector delivered all 61 synthetic riders over 183 directed-leg boardings. Fixed and retained evolved v1 both scored **0.581732**, served **18,004**, left **311 unserved**, met first-boarding targets for **41.5070%** and arrival targets for **65.5856%**, and incurred **11,970 model cost units**. Static service scored 0.761241, served 16,848, and left 1,467 unserved. The fixed agents help, but recursive candidates added no qualifying benefit in this experiment. All runs preserved capacity/feasibility limits.
+
+This is an explicitly **offline rule-based** experiment. It proves executable monitoring, mutation, evaluation and safe rejection; it does not prove a new city Gemini call or Atlas write. Twelve-hour playback also passed an actual API-backed browser check. Supported 24-hour duration remains an unmeasured performance setting, with synthetic overnight operations.
 
 ## Historical Event Surge results
 

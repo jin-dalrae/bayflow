@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 type Data = Record<string, any>;
 type Props = { run: Data | null; frame: Data; nodes: Data[]; edges: Data[]; selected: string | null; onSelect: (id: string) => void; onSeek: (minute: number) => void };
-const time = (m: number) => { const t = 960 + m; return `${Math.floor(t / 60) % 12 || 12}:${String(Math.round(t % 60)).padStart(2, '0')} PM`; };
+const time = (m: number) => { const elapsed=960+Math.round(m), day=Math.floor(elapsed/1440),t=((elapsed%1440)+1440)%1440; return `${Math.floor(t / 60) % 12 || 12}:${String(t % 60).padStart(2, '0')} ${t>=720?'PM':'AM'}${day>0?` · day +${day}`:''}`; };
 const amount = (v: any) => typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—';
 const rate = (v: any) => typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—';
 export default function PassengerInspector({ run, frame, nodes, edges, selected, onSelect, onSeek }: Props) {

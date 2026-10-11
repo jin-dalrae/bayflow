@@ -13,14 +13,14 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   await page.getByRole('button', { name: 'Run baseline' }).click();
   const baseline = await (await baselineResponse).json();
   expect(baseline.job_id).toBeTruthy();
-  await expect(page.getByRole('button', { name: 'Evolve harness' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Evaluate manually' })).toBeEnabled();
   await expect(page.locator('.map-overlay')).toContainText('Frame');
   await expect(page.locator('.table-row').filter({ hasText: 'Passenger delay' }).locator('b').nth(1)).not.toHaveText('—');
   const evolutionResponse = page.waitForResponse(response => response.url().endsWith('/api/harness/evolve') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Evolve harness' }).click();
+  await page.getByRole('button', { name: 'Evaluate manually' }).click();
   const evolution = await (await evolutionResponse).json();
   expect(evolution.job_id).toBeTruthy();
-  await expect(page.getByRole('button', { name: 'Evolve harness' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Evaluate manually' })).toBeEnabled();
   await expect(page.locator('.decision')).toHaveCount(2);
   await expect(page.locator('.execution-history li')).not.toHaveCount(0);
   await expect(page.locator('.planner-label')).toContainText('Rule-based');
@@ -45,6 +45,15 @@ test('live API baseline, recursive evolution, architecture and preview proof', a
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: 'test-results/bayflow-mobile.png', fullPage: true });
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('link',{name:'Evolution history',exact:true}).click();
+  await expect(page.locator('.history-page')).toContainText('Every measured outcome.');
+  await expect(page.locator('.history-entry')).toHaveCount(2);
+  await expect(page.locator('.history-page')).toContainText('held only in memory');
+  await page.getByLabel('History outcome').selectOption('accepted');
+  await expect(page.locator('.history-entry')).not.toHaveCount(0);
+  await page.getByLabel('History outcome').selectOption('all');
+  await page.screenshot({path:'test-results/bayflow-history.png',fullPage:true});
 });
 
 // Explicit opt-in: writes one real fixed-baseline run to the configured organizer Atlas Sandbox.
@@ -56,7 +65,7 @@ test('official Atlas baseline persists and exposes executable agent traces', asy
   const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/simulation/run') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Run baseline' }).click();
   const {job_id} = await (await responsePromise).json();
-  await expect(page.getByRole('button', { name: 'Evolve harness' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Evaluate manually' })).toBeEnabled();
   const job = await (await page.request.get(`/api/jobs/${job_id}`)).json();
   expect(job.status).toBe('completed');
   expect(job.result.persistence).toBe('atlas');
@@ -99,11 +108,13 @@ test('real geographic map loads agency bus lines and BART station coverage', asy
 });
 
 
-test('city commute tracks ten-minute support, reference ETA and full bus coverage', async ({ page }) => {
+test('city commute autonomously evolves, tracks ETA and exposes dedicated history', async ({ page }) => {
   await page.goto('/?offline=true');
   const scenarios = await (await page.request.get('/api/scenarios')).json();
   test.skip(!scenarios.some((scenario: any) => scenario.id === 'city_commute'), 'Restart the API with the city-commute simulation before running this test.');
   await expect(page.getByLabel('Transit scenario')).toHaveValue('city_commute');
+  await expect(page.getByLabel('Operating horizon')).toHaveValue('720');
+  await page.getByLabel('Operating horizon').selectOption('180');
   const network = await (await page.request.get('/api/network?scenario=city_commute')).json();
   expect(network.nodes.length).toBeGreaterThan(100);
   await page.getByRole('button', { name: /Show all Muni bus lines/ }).click();
@@ -112,7 +123,7 @@ test('city commute tracks ten-minute support, reference ETA and full bus coverag
   await page.getByRole('button', { name: 'Run baseline' }).click();
   const baseline = await (await baselineResponse).json();
   expect(baseline.job_id).toBeTruthy();
-  await expect(page.getByRole('button', { name: 'Evolve harness' })).toBeEnabled({timeout:120000});
+  await expect(page.getByRole('button', { name: 'Evaluate manually' })).toBeEnabled({timeout:120000});
   const job = await (await page.request.get(`/api/jobs/${baseline.job_id}`)).json();
   expect(job.status).toBe('completed');
   expect(job.result.scenario).toBe('city_commute');
@@ -127,13 +138,15 @@ test('city commute tracks ten-minute support, reference ETA and full bus coverag
   await expect(page.locator('.tracked-journey')).not.toContainText('undefined');
   await page.screenshot({path:'test-results/bayflow-city-journey.png',fullPage:true});
   await page.getByLabel('Mutation planner').selectOption('rule_based');
-  const evolutionResponse = page.waitForResponse(response => response.url().endsWith('/api/harness/evolve') && response.request().method() === 'POST');
-  await page.getByRole('button', {name:'Evolve harness'}).click();
+  const evolutionResponse = page.waitForResponse(response => response.url().endsWith('/api/operations/start') && response.request().method() === 'POST');
+  await page.getByRole('button', {name:'Start autonomous operations'}).click();
   const evolution = await (await evolutionResponse).json();
   expect(evolution.job_id).toBeTruthy();
-  await expect(page.getByRole('button', {name:'Evolve harness'})).toBeEnabled({timeout:180000});
+  await expect(page.getByRole('button', {name:'Start autonomous operations'})).toBeEnabled({timeout:180000});
   const evolvedJob = await (await page.request.get(`/api/jobs/${evolution.job_id}`)).json();
   expect(evolvedJob.status).toBe('completed');
+  expect(evolvedJob.result.automatic_trigger).toBeDefined();
+  await expect(page.locator('.automatic-trigger')).toContainText('Automatic evolution trigger');
   expect(evolvedJob.result.decisions).toHaveLength(3);
   for(const decision of evolvedJob.result.decisions){
     expect(decision.evaluation_seeds).toHaveLength(5);
@@ -153,4 +166,30 @@ test('city commute tracks ten-minute support, reference ETA and full bus coverag
   await page.getByRole('button', {name:/Show all Muni bus lines/}).click();
   await expect(page.locator('.service-level-grid strong').first()).not.toHaveText('—');
   await page.screenshot({path:'test-results/bayflow-city.png',fullPage:true});
+  await page.getByRole('link',{name:'Evolution history',exact:true}).click();
+  await expect(page.locator('.history-entry')).not.toHaveCount(0);
+  await expect(page.locator('.history-page')).toContainText('CANDIDATE RULE EXECUTIONS');
+  await page.getByLabel('History outcome').selectOption('rejected');
+  await expect(page.locator('.history-entry')).not.toHaveCount(0);
+  await page.screenshot({path:'test-results/bayflow-city-history.png',fullPage:true});
+});
+
+test('twelve-hour operations replay crosses midnight with actual backend frames',async({page})=>{
+ await page.goto('/?offline=true');
+ await expect(page.getByLabel('Operating horizon')).toHaveValue('720');
+ await page.getByLabel('Passenger demand multiplier').fill('0.25');
+ const responsePromise=page.waitForResponse(response=>response.url().endsWith('/api/simulation/run')&&response.request().method()==='POST');
+ await page.getByRole('button',{name:'Run baseline'}).click();
+ const submitted=await (await responsePromise).json();
+ expect(submitted.job_id).toBeTruthy();
+ await expect(page.getByRole('button',{name:'Run baseline'})).toBeEnabled({timeout:120000});
+ const job=await (await page.request.get(`/api/jobs/${submitted.job_id}`)).json();
+ expect(job.status).toBe('completed');
+ expect(job.result.horizon_minutes).toBe(720);
+ expect(job.result.frames.at(-1).minute).toBe(720);
+ await page.getByRole('button',{name:'Pause playback'}).click();
+ await page.getByRole('slider',{name:'Simulation time'}).press('End');
+ await expect(page.locator('.map-overlay strong')).toHaveText('4:00 AM · day +1');
+ await expect(page.locator('.passenger-proof')).toContainText('4:00 AM · day +1');
+ await page.screenshot({path:'test-results/bayflow-overnight.png',fullPage:true});
 });

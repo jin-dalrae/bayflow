@@ -137,7 +137,7 @@ def rule_plan(current, failure, history=None):
         elif metrics["boarding_within_10_minutes_rate"] < .95 and "service_frequency_optimizer" not in current.active_tools:
             candidate.update(coordination_mode="regional", context_policy="regional_shared")
             candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
-            candidate["active_tools"] = sorted(set(current.active_tools) | {"regional_coordination", "service_frequency_optimizer", "feasibility_checker"})
+            candidate["active_tools"] = sorted(set(current.active_tools) | {"regional_coordination", "service_frequency_optimizer"})
             rejected_frequency = any(not item.get("accepted") and "service_frequency_optimizer" in item.get("candidate", {}).get("active_tools", []) for item in (history or []))
             if rejected_frequency:
                 candidate["replanning_interval_minutes"] = max(5, current.replanning_interval_minutes - 10)
@@ -287,9 +287,19 @@ def propose(current, run, use_llm=True, history=None):
         "Expected improvement is a hypothesis, never a measured claim. Version is assigned independently after validation."
     )
     payload = {"current": current.model_dump(), "development_failure": failure,
-               "mutation_history": history or [], "available_agents": sorted(AGENTS), "available_tools": sorted(TOOLS),
+               "mutation_history": history or [], "available_agents": sorted(AGENTS - ({"demand_forecaster"} if run.get("scenario")=="city_commute" else set())), "available_tools": sorted(TOOLS - ({"demand_forecast","feasibility_checker"} if run.get("scenario")=="city_commute" else set())),
                "constraints": run.get("resource_constraints", "Three shared Muni standby vehicle/driver pairs; no extra BART or Caltrain fleet."),
                "safety_envelope": "Harness schema is authoritative. Tools require companion agents/context. Journey deadlines, consent seeds, resource/operating budgets and scoring are frozen. Held-out per-seed numerical scores are unavailable; historical aggregate decision feedback is supplied in bounded memory lessons."}
+    schema=MutationProposal.model_json_schema()
+    if run.get("scenario")=="city_commute":
+        schema["$defs"]["HarnessConfig"]["properties"]["optimization_strategy"]["enum"]=["local_greedy","transfer_aware"]
+        schema["$defs"]["HarnessConfig"]["properties"]["active_tools"]["items"]={"type":"string","enum":payload["available_tools"]}
+        schema["$defs"]["HarnessConfig"]["properties"]["active_agents"]["items"]={"type":"string","enum":payload["available_agents"]}
+        payload["city_capabilities"]="Demand forecasting and regional_predictive are not implemented for city. Feasibility is enforced deterministically regardless of tool flags; strict verification additionally checks end-of-horizon arrivals. Propose actual rules, policy, shared context, dispatch, advisory or transfer actions."
+    def supported(proposal):
+        if run.get("scenario")=="city_commute" and ("demand_forecast" in proposal.candidate.active_tools or "demand_forecaster" in proposal.candidate.active_agents or proposal.candidate.optimization_strategy=="regional_predictive"):
+            raise ValueError("City commute has no executable demand_forecast/demand_forecaster/regional_predictive capability")
+        return proposal
     if use_llm and provider == "gemini" and gemini_key:
         errors = []
         attempts = 0
@@ -308,14 +318,14 @@ def propose(current, run, use_llm=True, history=None):
                         request_payload["retry_instruction"] = "Previous candidate failed schema validation. Repair those exact fields, preserve the intended hypothesis and return one complete valid candidate. This is the sole validation retry."
                     response = client.models.generate_content(model=model, contents=json.dumps(request_payload),
                         config=types.GenerateContentConfig(system_instruction=system, response_mime_type="application/json",
-                            response_json_schema=MutationProposal.model_json_schema(), max_output_tokens=16384))
+                            response_json_schema=schema, max_output_tokens=16384))
                     usage = response.usage_metadata
                     input_tokens += (usage.prompt_token_count or 0) if usage else 0
                     output_tokens += (usage.candidates_token_count or 0) if usage else 0
                     thinking_tokens += (usage.thoughts_token_count or 0) if usage else 0
                     try:
-                        proposal = MutationProposal.model_validate_json(response.text or "")
-                    except ValidationError as exc:
+                        proposal = supported(MutationProposal.model_validate_json(response.text or ""))
+                    except (ValidationError,ValueError) as exc:
                         errors.append({"attempt": attempts, "error_type": type(exc).__name__, "message": redact(exc)})
                         if attempt == 0:
                             continue
@@ -324,7 +334,7 @@ def propose(current, run, use_llm=True, history=None):
                         "requested_model": model, "input_tokens": input_tokens, "output_tokens": output_tokens,
                         "thinking_tokens": thinking_tokens, "attempts": attempts, "validation_errors": errors}
         except Exception as exc:
-            if not errors or errors[-1]["attempt"] != attempts or not isinstance(exc, ValidationError):
+            if not errors or errors[-1]["attempt"] != attempts or not isinstance(exc, (ValidationError,ValueError)):
                 errors.append({"attempt": attempts, "error_type": type(exc).__name__, "message": redact(getattr(exc, "message", str(exc)))})
             return rule_plan(current, failure, history), {"kind": "rule_based", "requested_provider": "gemini",
                 "fallback_reason": f"Gemini unavailable or invalid response ({type(exc).__name__})",
@@ -337,11 +347,11 @@ def propose(current, run, use_llm=True, history=None):
             response = client.messages.create(model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5"), max_tokens=8192,
                 system=system, messages=[{"role": "user", "content": json.dumps(payload)}],
                 tools=[{"name": "propose_harness", "description": "Propose a bounded typed architecture/policy/rule hypothesis for independent evaluation.",
-                        "input_schema": MutationProposal.model_json_schema()}], tool_choice={"type": "tool", "name": "propose_harness"})
+                        "input_schema": schema}], tool_choice={"type": "tool", "name": "propose_harness"})
             blocks = [block for block in response.content if block.type == "tool_use" and block.name == "propose_harness"]
             if len(blocks) != 1:
                 raise ValueError("Expected exactly one proposal")
-            proposal = MutationProposal.model_validate(blocks[0].input)
+            proposal = supported(MutationProposal.model_validate(blocks[0].input))
             return proposal, {"kind": "llm", "provider": "anthropic", "model": response.model,
                 "input_tokens": response.usage.input_tokens, "output_tokens": response.usage.output_tokens, "attempts": 1}
         except Exception as exc:

@@ -45,7 +45,7 @@ def operating_assumptions(route):
 
 
 @lru_cache(maxsize=1)
-def get_city_network():
+def _get_city_network():
     reference = json.loads(REFERENCE_PATH.read_text())
     nodes = {}
     route_lookup = {route["id"]: route for route in reference["routes"]}
@@ -209,6 +209,23 @@ def get_city_network():
             "caltrain": "Selected four-node corridor retained from compact synthetic model; not full Caltrain GTFS",
             "route_variants": "Canonical longest trip per direction; actual additional longest trip per direction/shape preserves GTFS branches. Variant edges share route IDs; variants are not additional fleet. Repeated loop edges use first-occurrence departure phase (one canonical route36 edge); alternate branches share canonical segment phases.",
         },
+    )
+
+
+def get_city_network(horizon_minutes=180):
+    """Reuse observed topology; duration is an explicit synthetic scenario parameter."""
+    if (
+        not isinstance(horizon_minutes, int)
+        or isinstance(horizon_minutes, bool)
+        or not 180 <= horizon_minutes <= 1440
+    ):
+        raise ValueError("horizon_minutes must be an integer from180 to1440")
+    return dict(
+        _get_city_network(),
+        end_minute=horizon_minutes,
+        horizon_minutes=horizon_minutes,
+        start_time="16:00",
+        supported_horizon_minutes={"minimum": 180, "maximum": 1440},
     )
 
 

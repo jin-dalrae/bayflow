@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--scenario", choices=["city_commute","event_surge","commuter","accident"],default="city_commute")
+    parser.add_argument("--horizon-minutes",type=int,default=720,choices=range(180,1441),metavar="180..1440")
     args = parser.parse_args()
     store = Store(offline=args.offline)
     if args.offline:
@@ -40,6 +41,7 @@ def main():
         not args.rule_based,
         lambda stage: print(stage, file=sys.stderr),
         scenario=args.scenario,
+        horizon_minutes=args.horizon_minutes,
     )
     summary = {k: v for k, v in result.items() if k not in ("replay",)}
     summary["database_verification"] = store.status()

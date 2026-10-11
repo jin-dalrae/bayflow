@@ -158,9 +158,14 @@ def initialize(store):
         store.put("control", "active_harness", {"version": config.version})
 
 
-def current_config(store):
+def current_config(store,scenario=None):
     initialize(store)
-    pointer = store.get("control", "active_harness")
+    key="active_harness" if scenario is None else f"active_harness:{scenario}"
+    pointer = store.get("control",key)
+    if not pointer:
+        historical=[v for v in store.list("harness_versions",limit=10000) if v.get("accepted") is True and v.get("scenario","event_surge")==scenario]
+        pointer={"version":historical[-1]["version"] if historical else "v1","scenario":scenario}
+        store.put("control",key,pointer)
     return HarnessConfig.model_validate(
         store.get("harness_versions", pointer["version"])["config"]
     )
@@ -297,6 +302,7 @@ def evolve(
     use_llm=True,
     progress=lambda stage: None,
     scenario="city_commute",
+    automatic_trigger=None,
     **scenario_parameters,
 ):
     iterations = (
@@ -311,7 +317,7 @@ def evolve(
         from .city_simulator import CITY_EVALUATOR
 
         evaluator = CITY_EVALUATOR
-    current = current_config(store)
+    current = current_config(store,scenario=scenario)
     original = current
     decisions = []
     eval_seeds = list(EVALUATION_SEEDS)
@@ -332,7 +338,7 @@ def evolve(
                 "lesson": lessons.get(item["_id"], {}).get("lesson"),
             }
             for item in store.list("mutation_proposals", limit=1000)
-            if item.get("status") in ("promoted", "rejected")
+            if item.get("status") in ("promoted", "rejected") and item.get("scenario", "event_surge")==scenario
         ][-current.memory_window_steps :]
         proposal, planner = propose(current, development, use_llm, history)
         versions = store.list("harness_versions", limit=10000)
@@ -356,6 +362,8 @@ def evolve(
             "config_diff": diff,
             "iteration": iteration + 1,
             "scenario": scenario,
+            "automatic_trigger": automatic_trigger,
+            "scenario_parameters": scenario_parameters,
         }
         record["proposal"]["candidate"] = candidate.model_dump()
         store.put("mutation_proposals", mutation_id, record)
@@ -428,6 +436,8 @@ def evolve(
                 "mutation_summary": proposal.rationale,
                 "accepted": accepted,
                 "evaluation_id": mutation_id,
+                "scenario": scenario,
+                "evaluator_version": evaluator["version"],
                 "eligible": not store.offline,
                 "config_diff": diff,
             },
@@ -468,6 +478,7 @@ def evolve(
                 "active_harness",
                 {"version": version, "evaluation_id": mutation_id},
             )
+            store.put("control", f"active_harness:{scenario}", {"version":version,"evaluation_id":mutation_id,"scenario":scenario,"evaluator_version":evaluator["version"]})
             current = candidate
         lesson = {
             "scenario": scenario,

@@ -35,7 +35,15 @@ class Cohort:
     destination: str = ""
 
 
-def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_scale=1., advisory_acceptance_rate=.6):
+def simulate(
+    config=None,
+    seed=42,
+    mode="fixed",
+    scenario="event_surge",
+    demand_scale=1.0,
+    advisory_acceptance_rate=0.6,
+    horizon_minutes=180,
+):
     config = (
         config if isinstance(config, HarnessConfig) else HarnessConfig(**(config or {}))
     )
@@ -45,7 +53,15 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
         raise ValueError("Unknown scenario")
     if scenario == "city_commute":
         from .city_simulator import simulate_city
-        return simulate_city(config, seed, mode, demand_scale, advisory_acceptance_rate)
+
+        return simulate_city(
+            config,
+            seed,
+            mode,
+            demand_scale,
+            advisory_acceptance_rate,
+            horizon_minutes=horizon_minutes,
+        )
     rng = random.Random(seed)
     net = get_network()
     edges = {e["id"]: e for e in net["edges"]}
@@ -95,9 +111,17 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
     passenger_events = []
 
     def record_passenger(action, cohort, minute, **details):
-        passenger_events.append(dict(action=action, cohort_id=cohort.cohort_id,
-            count=cohort.count, origin=cohort.origin, destination=cohort.destination,
-            minute=minute, **details))
+        passenger_events.append(
+            dict(
+                action=action,
+                cohort_id=cohort.cohort_id,
+                count=cohort.count,
+                origin=cohort.origin,
+                destination=cohort.destination,
+                minute=minute,
+                **details,
+            )
+        )
 
     def generate(origin, destination, count, minute):
         nonlocal generated, transfer_count
@@ -119,11 +143,29 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
                 previous = edge["operator"]
             reference += edge["travel_minutes"]
         cohort_id = f"group-{len(passenger_groups) + 1:04d}"
-        cohort = Cohort(count, path, 0, minute, reference, minute,
-            cohort_id=cohort_id, origin=origin, destination=destination)
+        cohort = Cohort(
+            count,
+            path,
+            0,
+            minute,
+            reference,
+            minute,
+            cohort_id=cohort_id,
+            origin=origin,
+            destination=destination,
+        )
         queues[path[0]].append(cohort)
-        passenger_groups.append(dict(cohort_id=cohort_id, count=count, origin=origin,
-            destination=destination, born=minute, reference_arrival=reference, path=path))
+        passenger_groups.append(
+            dict(
+                cohort_id=cohort_id,
+                count=count,
+                origin=origin,
+                destination=destination,
+                born=minute,
+                reference_arrival=reference,
+                path=path,
+            )
+        )
         generated_od[(origin, destination)] += count
         record_passenger("generated", cohort, minute, node=origin)
         generated += count
@@ -138,14 +180,26 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
                 continue
             for cohort in vehicle["cohorts"]:
                 old = edge = edges[cohort.path[cohort.step]]
-                record_passenger("leg_arrival", cohort, minute, node=edge["target"],
-                    edge_id=edge["id"], operator=edge["operator"], vehicle_id=vehicle["id"])
+                record_passenger(
+                    "leg_arrival",
+                    cohort,
+                    minute,
+                    node=edge["target"],
+                    edge_id=edge["id"],
+                    operator=edge["operator"],
+                    vehicle_id=vehicle["id"],
+                )
                 next_step = cohort.step + 1
                 if next_step == len(cohort.path):
                     served += cohort.count
                     arrived_od[(cohort.origin, cohort.destination)] += cohort.count
-                    record_passenger("arrived", cohort, minute, node=cohort.destination,
-                        delay_minutes=max(0, minute - cohort.reference))
+                    record_passenger(
+                        "arrived",
+                        cohort,
+                        minute,
+                        node=cohort.destination,
+                        delay_minutes=max(0, minute - cohort.reference),
+                    )
                     delay_total += max(0, minute - cohort.reference) * cohort.count
                     continue
                 nxt = edges[cohort.path[next_step]]
@@ -434,10 +488,17 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
                     suffix = "" if vehicle_index == 0 else f"-standby{vehicle_index}"
                     vehicle_id = f"{minute}-{eid}{suffix}"
                     for cohort in pack:
-                        record_passenger("walking" if e["operator"] == "walk" else "boarded",
-                            cohort, minute, node=e["source"], target=e["target"],
-                            edge_id=eid, operator=e["operator"], vehicle_id=vehicle_id,
-                            arrival_minute=minute + duration)
+                        record_passenger(
+                            "walking" if e["operator"] == "walk" else "boarded",
+                            cohort,
+                            minute,
+                            node=e["source"],
+                            target=e["target"],
+                            edge_id=eid,
+                            operator=e["operator"],
+                            vehicle_id=vehicle_id,
+                            arrival_minute=minute + duration,
+                        )
                     moving.append(
                         {
                             "id": vehicle_id,
@@ -484,9 +545,18 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
                 and 250 <= minute < 290
             )
             feasibility_violations += int(forbidden)
-        flows = {key: dict(origin=key[0], destination=key[1], generated=count,
-            waiting=0, riding=0, walking=0, arrived=arrived_od[key])
-            for key, count in generated_od.items()}
+        flows = {
+            key: dict(
+                origin=key[0],
+                destination=key[1],
+                generated=count,
+                waiting=0,
+                riding=0,
+                walking=0,
+                arrived=arrived_od[key],
+            )
+            for key, count in generated_od.items()
+        }
         for q in queues.values():
             for c in q:
                 flows[(c.origin, c.destination)]["waiting"] += c.count
@@ -494,11 +564,16 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
             for c in v["cohorts"]:
                 state = "walking" if v["operator"] == "walk" else "riding"
                 flows[(c.origin, c.destination)][state] += c.count
-        balance = dict(generated=generated, arrived=served,
+        balance = dict(
+            generated=generated,
+            arrived=served,
             waiting=sum(f["waiting"] for f in flows.values()),
             riding=sum(f["riding"] for f in flows.values()),
-            walking=sum(f["walking"] for f in flows.values()))
-        balance["conserved"] = generated == sum(balance[k] for k in ("arrived", "waiting", "riding", "walking"))
+            walking=sum(f["walking"] for f in flows.values()),
+        )
+        balance["conserved"] = generated == sum(
+            balance[k] for k in ("arrived", "waiting", "riding", "walking")
+        )
         frames.append(
             {
                 "minute": minute,
@@ -517,8 +592,15 @@ def simulate(config=None, seed=42, mode="fixed", scenario="event_surge", demand_
                         ),
                         "occupancy": sum(c.count for c in v["cohorts"]),
                         "capacity": v["capacity"],
-                        "passenger_groups": [dict(cohort_id=c.cohort_id, count=c.count,
-                            origin=c.origin, destination=c.destination) for c in v["cohorts"]],
+                        "passenger_groups": [
+                            dict(
+                                cohort_id=c.cohort_id,
+                                count=c.count,
+                                origin=c.origin,
+                                destination=c.destination,
+                            )
+                            for c in v["cohorts"]
+                        ],
                     }
                     for v in moving
                 ],
