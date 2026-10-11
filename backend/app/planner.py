@@ -296,6 +296,13 @@ def propose(current, run, use_llm=True, history=None):
         schema["$defs"]["HarnessConfig"]["properties"]["active_tools"]["items"]={"type":"string","enum":payload["available_tools"]}
         schema["$defs"]["HarnessConfig"]["properties"]["active_agents"]["items"]={"type":"string","enum":payload["available_agents"]}
         payload["city_capabilities"]="Demand forecasting and regional_predictive are not implemented for city. Feasibility is enforced deterministically regardless of tool flags; strict verification additionally checks end-of-horizon arrivals. Propose actual rules, policy, shared context, dispatch, advisory or transfer actions."
+    # Gemini structured output rejects this schema with maxItems (400 INVALID_ARGUMENT);
+    # MutationProposal validation below still enforces every list limit.
+    def without_max_items(node):
+        if isinstance(node, dict): return {k: without_max_items(v) for k, v in node.items() if k != "maxItems"}
+        if isinstance(node, list): return [without_max_items(v) for v in node]
+        return node
+    schema=without_max_items(schema)
     def supported(proposal):
         if run.get("scenario")=="city_commute" and ("demand_forecast" in proposal.candidate.active_tools or "demand_forecaster" in proposal.candidate.active_agents or proposal.candidate.optimization_strategy=="regional_predictive"):
             raise ValueError("City commute has no executable demand_forecast/demand_forecaster/regional_predictive capability")
