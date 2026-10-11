@@ -331,10 +331,10 @@ export default function TransitMap({
       if (q > 0)
         L.circleMarker(location(node), {
           renderer: city ? modelRenderer.current! : undefined,
-          radius: Math.min(30, 8 + Math.sqrt(q) / 2),
+          radius: Math.min(34, 9 + Math.sqrt(q) / 1.6),
           weight: 0,
           fillColor: q > 200 ? "#ff805b" : "#e9b168",
-          fillOpacity: 0.3,
+          fillOpacity: 0.45,
           interactive: false,
         }).addTo(layer);
       const marker = L.circleMarker(location(node), {
@@ -405,9 +405,9 @@ export default function TransitMap({
       const trackedCount=(vehicle.passenger_groups||[]).filter((g:Data)=>g.cohort_id===trackedGroup).reduce((n:number,g:Data)=>n+g.count,0);
       L.circleMarker(point, {
         renderer: city ? modelRenderer.current! : undefined,
-        radius: trackedCount ? 7 : 4,
-        weight: 1,
-        color: trackedCount ? "#fff" : "#10221c",
+        radius: trackedCount ? 8 : 6,
+        weight: 1.5,
+        color: trackedCount ? "#fff" : "#f4f8ec",
         fillColor: tint(vehicle.operator),
         fillOpacity: 1,
         className: trackedCount ? "sf-vehicle tracked-passenger-vehicle" : "sf-vehicle",

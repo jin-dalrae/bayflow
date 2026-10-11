@@ -127,7 +127,19 @@ export default function App() {
     setPlaying(false);
     setFrameIndex(0);
     setTrackedPassenger(null);
-    void refresh();
+    void refresh().then(async () => {
+      // Start with the latest stored operating window so the map is moving on arrival.
+      try {
+        const events: Data[] = await api(previewPath("/operations/history"));
+        const latest = (Array.isArray(events) ? events : []).filter(e => e.scenario === scenario && e.observed_run_id).slice(-1)[0];
+        if (!latest || !alive.current) return;
+        const stored = await api(previewPath(`/simulation/${latest.observed_run_id}`));
+        if (!alive.current) return;
+        setRun(current => current || stored);
+        setFrameIndex(0);
+        setPlaying(true);
+      } catch {}
+    });
     const t = setInterval(() => {
       const generation = requestGeneration.current;
       void api(previewPath("/database/status")).then(data => {
@@ -152,10 +164,7 @@ export default function App() {
     const t = setInterval(
       () =>
         setFrameIndex((i) => {
-          if (i >= frames.length - 1) {
-            setPlaying(false);
-            return i;
-          }
+          if (i >= frames.length - 1) return 0;
           return i + 1;
         }),
       100,
@@ -165,7 +174,6 @@ export default function App() {
   async function launch(path: string, body: Data) {
     setError("");
     setBusy(true);
-    setPlaying(false);
     setTrackedPassenger(null);
     setCandidate(null);
     setAction(path.includes("operations") ? "operations" : path.includes("evolve") ? "evolve" : path.includes("rollback") ? "rollback" : "baseline");
@@ -419,7 +427,7 @@ export default function App() {
                 <p>{outcomeDecision.reason}</p>
                 {outcomeDecision.before && <table className="outcome-table"><thead><tr><th>Held-out seeds</th><th>{outcomeDecision.parent_version}</th><th>{version(outcomeDecision)}</th></tr></thead><tbody>{kpis.map(([key,label,higher]) => { const b=readMetric(outcomeDecision.before,key), a=readMetric(outcomeDecision.after,key); const better = a===undefined||b===undefined ? null : higher ? a>b : a<b; return <tr key={key}><th>{label}</th><td>{displayMetric(outcomeDecision.before,key)}</td><td className={better===null?"":better?"better":"worse"}>{displayMetric(outcomeDecision.after,key)}</td></tr>; })}</tbody></table>}
                 {result?.decisions && <small>{result.decisions.filter((d: Data) => d.accepted).length} promoted / {result.decisions.length} candidates tested this run</small>}
-              </> : result?.operations ? <><div className="outcome-verdict"><span className="decision-badge accepted">HEALTHY</span><b>No change needed</b></div><p>Riders stayed on target, so the service monitor asked for no change.</p></> : <p className="muted">{run ? "Baseline loaded. Run the autonomous simulation to let the agents act on it." : "Run the autonomous simulation to see whether the agents can improve service."}</p>}
+              </> : result?.operations ? <><div className="outcome-verdict"><span className="decision-badge accepted">HEALTHY</span><b>No change needed</b></div><p>Riders stayed on target, so the service monitor asked for no change.</p></> : <p className="muted">{run ? "Replaying the latest stored operating window. Run the autonomous simulation to watch the harness react." : "Run the autonomous simulation to see whether the agents can improve service."}</p>}
               <div className={"outcome-atlas " + (db.connected ? "ok" : "")}>{db.connected ? `✓ Every message and decision saved to MongoDB Atlas · ${fmt(count)} records` : offline ? "Offline preview · records held in memory only" : "Atlas not connected"}</div>
             </div>
         <div className="details-stack">

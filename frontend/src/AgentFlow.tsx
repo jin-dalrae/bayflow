@@ -93,7 +93,7 @@ function cycleMessages(trigger: Data | null | undefined, decisions: Data[], star
     });
     rows.push({
       group, from: "evaluator", to: "gate",
-      label: d.before?.objective !== undefined ? `Results are in: ${v} beat ${d.parent_version} on ${d.seed_wins ?? "?"} of ${seeds} days; overall cost ${Number(d.before.objective).toFixed(3)} → ${Number(d.after.objective).toFixed(3)} (lower is better).` : `Results for ${v} are in.`,
+      label: d.before?.objective !== undefined ? `Results are in${d.seed_wins !== undefined ? `: ${v} beat ${d.parent_version} on ${d.seed_wins} of ${seeds} days` : ` for ${v}`}; overall cost ${Number(d.before.objective).toFixed(3)} → ${Number(d.after.objective).toFixed(3)} (lower is better).` : `Results for ${v} are in.`,
       decision: d.accepted ? `PROMOTE ${v}` : `REJECT · ${d.reason || "gate not met"}`, tone: d.accepted ? "ok" : "bad",
     });
     rows.push({ group, from: "gate", to: "atlas", label: d.accepted ? `Promote ${v}: it cleared every gate. Make it the active harness.` : `Reject ${v}: ${d.reason || "gate not met"}. Keep ${d.parent_version}.`, decision: d.accepted ? `Active harness → ${v}` : `Stored as rejected; ${d.parent_version} stays active`, tone: d.accepted ? "ok" : "neutral" });
