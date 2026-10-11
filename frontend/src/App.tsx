@@ -374,7 +374,7 @@ export default function App() {
                 scenario,
                 demand_scale: demandScale,
                 advisory_acceptance_rate: advisoryAcceptance,
-                iterations: 2,
+                iterations: scenario === "city_commute" ? 3 : 2,
                 use_llm: useLlm,
               });
             }}

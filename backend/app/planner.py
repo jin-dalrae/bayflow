@@ -138,9 +138,13 @@ def rule_plan(current, failure, history=None):
             candidate.update(coordination_mode="regional", context_policy="regional_shared")
             candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
             candidate["active_tools"] = sorted(set(current.active_tools) | {"regional_coordination", "service_frequency_optimizer", "feasibility_checker"})
-            candidate["policy"]["urgent_wait_minutes"] = max(3, current.policy.urgent_wait_minutes - 1)
+            rejected_frequency = any(not item.get("accepted") and "service_frequency_optimizer" in item.get("candidate", {}).get("active_tools", []) for item in (history or []))
+            if rejected_frequency:
+                candidate["replanning_interval_minutes"] = max(5, current.replanning_interval_minutes - 10)
+            else:
+                candidate["policy"]["urgent_wait_minutes"] = max(3, current.policy.urgent_wait_minutes - 1)
             diagnosis = "Measured first-boarding target failures suggest local service allocation does not prioritize waiting travel intents across providers."
-            rationale = "Test shared service-frequency allocation and trigger urgent waits one minute earlier within unchanged resources and gross operating budget."
+            rationale = ("A slower service-frequency proposal was rejected; test faster replanning to act before deadlines within the same fleet and budget." if rejected_frequency else "Test shared service-frequency allocation and trigger urgent waits one minute earlier within unchanged resources and gross operating budget.")
         elif metrics.get("crowding_exposure_passenger_minutes", 0) > 0 and "passenger_advisory" not in current.active_tools:
             candidate.update(coordination_mode="regional", context_policy="regional_shared")
             candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
@@ -156,6 +160,18 @@ def rule_plan(current, failure, history=None):
                 policy["dispatch_threshold_regional"] = round(min(3, current.policy.dispatch_threshold_regional + .1), 4)
             diagnosis = "Residual observed queues and prior proposal outcomes require a smaller controller-policy hypothesis rather than repeating an architectural bundle."
             rationale = "Test bounded age-priority tuning; after rejection, raise dispatch pressure threshold to reduce speculative reserve use. Independent evaluation preserves failed hypotheses."
+        # Version IDs do not make an old policy hypothesis new. Avoid repeats
+        # by testing a bounded age-priority increment justified by residual waits.
+        tried=[]
+        for item in history or []:
+            try:
+                prior=HarnessConfig.model_validate(item.get("candidate", {})).model_dump(exclude={"version"})
+                tried.append(prior)
+            except Exception:
+                continue
+        while HarnessConfig.model_validate(candidate).model_dump(exclude={"version"}) in tried and candidate["policy"]["age_weight"]<1:
+            candidate["policy"]["age_weight"]=round(min(1,candidate["policy"]["age_weight"]+.05),4)
+            rationale += " This architecture/cadence was previously tested; add a bounded age-priority increment to form a distinct residual-wait hypothesis."
         return MutationProposal(diagnosis=diagnosis, rationale=rationale,
             expected_improvement="Improve fixed journey targets or transfer reliability without changing demand, deadlines, consent, physical limits or evaluator.",
             confidence=.55, candidate=HarnessConfig(**candidate))
@@ -273,7 +289,7 @@ def propose(current, run, use_llm=True, history=None):
     payload = {"current": current.model_dump(), "development_failure": failure,
                "mutation_history": history or [], "available_agents": sorted(AGENTS), "available_tools": sorted(TOOLS),
                "constraints": run.get("resource_constraints", "Three shared Muni standby vehicle/driver pairs; no extra BART or Caltrain fleet."),
-               "safety_envelope": "Harness schema is authoritative. Tools require companion agents/context. Journey deadlines, consent seeds, resource/operating budgets and scoring are frozen. Held-out numerical scores are unavailable."}
+               "safety_envelope": "Harness schema is authoritative. Tools require companion agents/context. Journey deadlines, consent seeds, resource/operating budgets and scoring are frozen. Held-out per-seed numerical scores are unavailable; historical aggregate decision feedback is supplied in bounded memory lessons."}
     if use_llm and provider == "gemini" and gemini_key:
         errors = []
         attempts = 0

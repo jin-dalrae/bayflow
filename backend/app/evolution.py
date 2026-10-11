@@ -182,6 +182,33 @@ def objective(metrics):
     raise ValueError("Simulator did not report fixed evaluator objective")
 
 
+def aggregate_rule_telemetry(runs):
+    """Sum actual rule counters across runs, keeping rule IDs and action labels."""
+    count_fields = (
+        "evaluations",
+        "fired",
+        "dispatches",
+        "holds",
+        "hold_minutes",
+        "riders_affected",
+    )
+    summary = {}
+    for run in runs:
+        for rule_id, telemetry in run.get("rule_telemetry", {}).items():
+            if rule_id not in summary:
+                summary[rule_id] = {
+                    "action": telemetry["action"],
+                    **{field: 0 for field in count_fields},
+                }
+            elif summary[rule_id]["action"] != telemetry["action"]:
+                raise ValueError(
+                    f"Rule {rule_id} changed action within one paired evaluation"
+                )
+            for field in count_fields:
+                summary[rule_id][field] += telemetry.get(field, 0)
+    return summary
+
+
 def evaluation_distribution(before_runs, after_runs):
     if len(before_runs) != len(after_runs) or not before_runs:
         raise ValueError("Paired evaluation needs equal nonempty run sets")
@@ -361,6 +388,8 @@ def evolve(
         control_before, control_after = runs[-2:]
         before, after = aggregate(before_runs), aggregate(after_runs)
         distribution = evaluation_distribution(before_runs, after_runs)
+        baseline_rule_telemetry = aggregate_rule_telemetry(before_runs)
+        candidate_rule_telemetry = aggregate_rule_telemetry(after_runs)
         progress("Comparing results against frozen promotion gates")
         accepted, reason, improvement = promotion_gate(
             before,
@@ -384,6 +413,8 @@ def evolve(
             "run_ids": [run["run_id"] for run in runs],
             "evaluator": evaluator,
             "config_diff": diff,
+            "baseline_rule_telemetry": baseline_rule_telemetry,
+            "candidate_rule_telemetry": candidate_rule_telemetry,
             **distribution,
         }
         store.put("evaluation_results", mutation_id, evaluation)
@@ -411,6 +442,8 @@ def evolve(
             status="promoted" if accepted else "rejected",
             accepted=accepted,
             reason=reason,
+            baseline_rule_telemetry=baseline_rule_telemetry,
+            candidate_rule_telemetry=candidate_rule_telemetry,
         )
         store.put("mutation_proposals", mutation_id, record)
         store.put(
@@ -425,6 +458,8 @@ def evolve(
                 "config_diff": diff,
                 "seed_wins": distribution["seed_wins"],
                 "improvement_percent": improvement,
+                "baseline_rule_telemetry": baseline_rule_telemetry,
+                "candidate_rule_telemetry": candidate_rule_telemetry,
             },
         )
         if accepted:
@@ -470,6 +505,8 @@ def evolve(
                         "required_seed_wins",
                         "before_distribution",
                         "after_distribution",
+                        "baseline_rule_telemetry",
+                        "candidate_rule_telemetry",
                     )
                 },
             )

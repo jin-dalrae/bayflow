@@ -125,5 +125,32 @@ test('city commute tracks ten-minute support, reference ETA and full bus coverag
   await page.getByLabel('Follow a passenger group').selectOption(firstGroup.cohort_id);
   await expect(page.locator('.journey-eta')).toContainText('Initial ETA');
   await expect(page.locator('.tracked-journey')).not.toContainText('undefined');
+  await page.screenshot({path:'test-results/bayflow-city-journey.png',fullPage:true});
+  await page.getByLabel('Mutation planner').selectOption('rule_based');
+  const evolutionResponse = page.waitForResponse(response => response.url().endsWith('/api/harness/evolve') && response.request().method() === 'POST');
+  await page.getByRole('button', {name:'Evolve harness'}).click();
+  const evolution = await (await evolutionResponse).json();
+  expect(evolution.job_id).toBeTruthy();
+  await expect(page.getByRole('button', {name:'Evolve harness'})).toBeEnabled({timeout:180000});
+  const evolvedJob = await (await page.request.get(`/api/jobs/${evolution.job_id}`)).json();
+  expect(evolvedJob.status).toBe('completed');
+  expect(evolvedJob.result.decisions).toHaveLength(3);
+  for(const decision of evolvedJob.result.decisions){
+    expect(decision.evaluation_seeds).toHaveLength(5);
+    expect(decision.config_diff).toBeDefined();
+    expect(decision.per_seed).toHaveLength(5);
+    expect(typeof decision.seed_wins).toBe('number');
+    expect(decision.candidate_rule_telemetry).toBeDefined();
+  }
+  await expect(page.locator('.rulebook')).toContainText('EXECUTABLE OPERATING RULEBOOK');
+  await expect(page.locator('.configuration-diff')).toHaveCount(3);
+  await expect(page.locator('.candidate-rule-telemetry')).toHaveCount(3);
+  await expect(page.locator('.mutation-evidence').first()).toContainText('seeds won');
+  await page.getByRole('button', {name:'Pause playback'}).click();
+  const slider=page.getByRole('slider',{name:'Simulation time'});
+  await slider.press('End');
+  for(let index=0;index<60;index++)await slider.press('ArrowLeft');
+  await page.getByRole('button', {name:/Show all Muni bus lines/}).click();
+  await expect(page.locator('.service-level-grid strong').first()).not.toHaveText('—');
   await page.screenshot({path:'test-results/bayflow-city.png',fullPage:true});
 });

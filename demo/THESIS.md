@@ -14,7 +14,7 @@ The original Event Surge experiment is implemented and verified on a compact 21-
 
 The interface also includes imported SFMTA/BART stop/shape data. Those observed schedule snapshots expired in August 2026; they are not current service or live GPS feeds. Passenger demand remains synthetic.
 
-The City Commute extension has a constructed GTFS-connected network with 3,292 nodes and 8,369 directed edges, plus selected derived Caltrain connections. The city simulator, advisory execution, deadline metrics, controls, and paired measurements are still being implemented. This document predefines their hypotheses and scoring before their results exist. No city or ablation performance claim is made yet.
+City Commute is implemented on a GTFS-connected network with 3,292 nodes and 8,369 directed edges, plus selected derived Caltrain connections. Its one-minute simulator executes service changes, voluntary advisories, bounded policies and typed rules, with frozen journey targets and passenger accounting. All 82 imported agency service records, including all 58 Muni bus routes, carry passengers in the measured baseline. This thesis predefined its scoring before candidate results. A completed three-iteration offline rule-based loop rejected all three tested candidates, retaining v1; new city Gemini-plus-Atlas verification remains pending network access. No ablation or generalization claim is made.
 
 ## What the agents may change in the simulated city
 
@@ -25,7 +25,9 @@ The City Commute extension has a constructed GTFS-connected network with 3,292 n
 | Voluntary passenger advice | Offer a connected alternative path that avoids a crowded segment | Same destination; predicted ETA no more than ten minutes beyond the original; seeded acceptance or decline |
 | Harness architecture | Change active agents/tools, shared context, coordination, memory, horizon, or replanning | Typed schema and allowlist; cannot edit the simulator, resource limits, or evaluator |
 
-`service_frequency_optimizer` and `passenger_advisory` are the planned bounded tool interfaces. A regional coordinator works with operator agents to select actions. LLM output is an architecture hypothesis; ordinary algorithms calculate capacity, routes, boarding, travel, costs, and scores. A model cannot create a bus or calculate its own improvement.
+`service_frequency_optimizer` and `passenger_advisory` are implemented bounded tool interfaces. A regional coordinator works with operator agents to select actions. The mutable controller policy sets bounded pressure/age/lookahead parameters. Up to 12 typed rules can trigger standby dispatch, transfer priority, or a hold of at most five minutes from measured signals. LLM output is an architecture hypothesis; ordinary algorithms calculate capacity, routes, boarding, travel, costs, and scores. A model cannot create a bus or calculate its own improvement.
+
+Incoming-transfer forecasts project already-moving riders through explicit walking links to a different operator/platform. A hold changes one directed segment departure without adding fleet or capacity; downstream calendars remain fixed rather than shifting an entire physical vehicle schedule. Its actual effects on helped and delayed riders are evaluated.
 
 Suppressing service is a constrained experiment, not permission to cancel arbitrary trips. Savings are meaningful only when the minimum service and journey outcomes hold. The score uses nonnegative net additional cost, so reducing service cost below baseline cannot create an unlimited negative fitness reward.
 
@@ -61,19 +63,27 @@ J_city = 0.35 × (1 − boarding success fraction)
 
 Boarding success means first bus/rail boarding within ten minutes. Arrival success means final arrival by original ETA plus ten minutes. Zero generated demand must be handled explicitly rather than dividing by zero or presenting a fictitious success rate. Cost units and queue-area sizes remain documented synthetic assumptions.
 
-This proposed `city-v2` evaluator is separate from Event Surge's preserved `objective-v1`. New scope warrants a new predefined experiment; it does not justify changing the historical evaluator or relabeling its improvement. Every run must store its evaluator version, weights, scenario, seed, controls, and complete harness configuration.
+The implemented `city-intent-v2` evaluator is separate from Event Surge's preserved `objective-v1`. New scope warrants a new predefined experiment; it does not justify changing the historical evaluator or relabeling its improvement. Every run stores evaluator version, weights, scenario, seed, controls, and complete harness configuration.
 
-The fixed proposed city standby pool is 12 bus, four Metro, two BART, and one Caltrain vehicle/driver pairs. No architecture mutation can enlarge it, relax a deadline, increase advice compliance, reduce demand, change density assumptions, or alter scoring.
+The fixed city standby pool is 12 bus, four Metro, two BART, and one Caltrain vehicle/driver pairs, with a 12,000-unit gross supplemental-service budget. These are model cost units, not dollars. An overspending early development hypothesis helped some journeys but worsened the objective; the budget was fixed before the new promotion benchmark, with scoring weights unchanged. No architecture mutation can enlarge it, relax a deadline, increase advice compliance, reduce demand, change density assumptions, or alter scoring.
 
 ## Experiments that can support the claim
 
-Run static timetable, operational agents with a fixed harness, and recursively evolving agents against identical city scenarios, demand scale, advice acceptance, random seeds, resources, and evaluation rules. Use separate development seeds for diagnosis and three predetermined promotion seeds plus a regression scenario for comparison. Keep the promotion gate independent from planner generation. Preserve rejected candidates and explain their actual measured reason.
+Run static timetable, operational agents with a fixed harness, and recursively evolving agents against identical city scenarios, demand scale, advice acceptance, random seeds, resources, and evaluation rules. The implemented suite uses five fixed paired promotion seeds (1043/2045/3043/4049/5051), regression seed 5003, and a disjoint development seed. Promotion requires at least 2% lower mean objective, improvement on at least three seeds, zero unsafe/capacity violations, and at most 5% control regression. Independent worker processes simulate candidates in parallel; only the parent writes persistence. Preserve rejected candidates and explain their actual measured reason.
 
 Where runtime permits, isolate supply-only, guidance-only, and combined intervention. Sweep advice acceptance at 0%, 30%, 60%, and 90% while keeping all other inputs fixed. At 0%, advice cannot itself improve realized routes; this is a useful check that predictions are not being counted as completed outcomes. Supply-only performance helps distinguish architectural coordination benefits from merely deploying more vehicles.
 
 Report the boarding and arrival target rates, their joint success, crowding exposure and distribution, served/unserved accounting, cost and resources, actual advice acceptance, and unsafe/infeasible actions. Show per-seed results as well as aggregates. An improved weighted score can hide a worsened outcome, so report every component.
 
-The current adaptive loop reuses its promotion suite across iterations and shares acceptance/rejection history with the planner. That benchmark can support operational selection inside the experiment, but is not an independent final generalization test. Freeze the selected champion and evaluate untouched seeds before claiming that it generalizes. No ablation or compliance-sweep result is reported until actually executed.
+The current adaptive loop reuses its promotion suite across iterations and shares acceptance/rejection reasons, diffs, and aggregate outcome lessons with the planner. That benchmark can support operational selection inside the experiment, but is not an independent final generalization test. Freeze the selected champion and evaluate untouched seeds before claiming that it generalizes. No ablation or compliance-sweep result is reported until actually executed.
+
+## Actual completed city experiment
+
+The [offline artifact](evaluation-city-rules-offline.json) generated 9,761 seed-42 passengers. Fixed/retained v1 scores 0.445556, with 52.6688% boarding within ten minutes, 58.3239% arrival within the original ETA allowance, 2,380 unserved and 615 missed transfers. Static timetable scores 0.466728. These are synthetic-model measurements.
+
+The first neighbor-context/two-minute hold proposal worsened mean promotion-suite objective 4.201133% and won no seeds. It actually executed: 5,107 evaluations, 233 triggers, 74 holds, 97 hold minutes, and 5,181 affected-rider event counts. The second regional frequency/urgent-six-minute policy worsened mean objective 5.844837%, again winning none. The third regional frequency/five-minute replanning policy improved it 1.206022% and won four seeds, but failed the unchanged 2% gate. All three were rejected; no qualifying city champion was found.
+
+A prior repeated-fallback proposal issue was found and fixed; the final artifact records distinct hypotheses. The result verifies executable recursion and disciplined rejection, not positive city performance. The hold's fixed downstream calendars are a plausible tradeoff to investigate, not a demonstrated causal explanation for its harm. New city model/database proof still requires a network-enabled official Atlas run; historical Event Surge Gemini/Atlas proof remains separate.
 
 ## Verification before calling the city experiment complete
 

@@ -159,3 +159,50 @@ def test_persisted_rule_diff_five_seeds_and_bounded_prior_lessons(monkeypatch):
         assert store.get("agent_memory", identifier)["lesson"][
             "measured_improvement_percent"
         ] == round(decision["improvement_percent"], 6)
+
+
+def test_rule_telemetry_aggregates_actual_runs_without_inventing_firings():
+    runs = [
+        {
+            "rule_telemetry": {
+                "transfer_hold": {
+                    "action": "hold_for_transfer",
+                    "evaluations": 12,
+                    "fired": 3,
+                    "holds": 2,
+                    "hold_minutes": 5,
+                    "riders_affected": 17,
+                }
+            }
+        },
+        {
+            "rule_telemetry": {
+                "transfer_hold": {
+                    "action": "hold_for_transfer",
+                    "evaluations": 9,
+                    "fired": 1,
+                    "holds": 1,
+                    "hold_minutes": 2,
+                    "riders_affected": 8,
+                },
+                "inactive_rule": {
+                    "action": "standby_dispatch",
+                    "evaluations": 0,
+                    "fired": 0,
+                },
+            }
+        },
+        {},
+    ]
+    summary = evolution.aggregate_rule_telemetry(runs)
+    assert summary["transfer_hold"] == {
+        "action": "hold_for_transfer",
+        "evaluations": 21,
+        "fired": 4,
+        "dispatches": 0,
+        "holds": 3,
+        "hold_minutes": 7,
+        "riders_affected": 25,
+    }
+    assert summary["inactive_rule"]["fired"] == 0
+    assert evolution.aggregate_rule_telemetry([{}, {}]) == {}

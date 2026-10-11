@@ -4,7 +4,7 @@
 
 Public source: [jin-dalrae/bayflow](https://github.com/jin-dalrae/bayflow).
 
-BayFlow is an experimental recursive agent harness for a compact San Francisco transit corridor. Operational agents respond to synthetic demand and disruption. A separate mutation planner observes their measured failures, proposes a bounded change to the agents' architecture, reruns the candidate, and promotes or rejects it using an independent evaluator.
+BayFlow is an experimental recursive agent harness for San Francisco transit. Its city experiment runs synthetic commutes over imported GTFS stop connections; the original compact corridor remains available for Event Surge demonstrations. Operational agents respond to measured queues and disruptions. A mutation planner diagnoses their failures, changes validated architecture, policy parameters, or declarative rules, reruns the candidate, and independently promotes or rejects it.
 
 The technical contribution is the executable architecture evolution loop. The React interface makes that loop inspectable through a transit replay, agent topology, configuration changes, and recorded decisions.
 
@@ -16,17 +16,17 @@ The supply side can place limited standby vehicles where queues need them and ad
 
 The recursive part changes how the agents make those choices: which agents/tools they use, which stops and neighboring services they can observe, how far they plan ahead, and how often they reconsider. A fixed agent might repeatedly add a bus to the longest queue. An evolving harness can test a different coordination/context policy that considers downstream transfers and passenger alternatives, then retain it only if the measured journeys improve.
 
-**What is verified now:** the 21-node Event Surge simulator, passenger/queue/vehicle accounting, the real Gemini architecture mutation, matched-seed promotion/rejection, and official Atlas persistence. The broad map contains imported agency stops and shapes. **City Commute extension in progress:** an actual GTFS-connected graph has been constructed with 3,292 nodes and 8,369 directed transit/walking edges, including the selected Caltrain connector; its city demand, advisory actions, new evaluator, controls, and paired experiments are being implemented. No city improvement or ablation result is claimed yet. Historical Event Surge results below remain results from the compact model.
+**Implemented City Commute:** 3,292 nodes and 8,369 directed transit/walking edges, using actual GTFS stop sequences and service variants plus the selected derived Caltrain connector. A measured baseline exercises all 82 imported agency service records, including all 58 Muni bus routes. Demand, segment calendars, speeds, capacities, queue areas, consent, and resources remain synthetic. The one-minute simulator executes provider service changes, voluntary alternatives, and typed rules with passenger/queue/vehicle accounting. Its completed three-iteration offline evolution generated distinct hypotheses, executed and rejected all three, and retained v1; no qualifying city improvement is claimed. Real Gemini-plus-Atlas evidence below is historical Event Surge evidence, not proof of the new city run.
 
 The full hypothesis, manipulation limits, measurement definitions, and test plan are in [the experiment thesis](demo/THESIS.md). The two ten-minute targets are the current interpretation of the commuter goal; they are explicit experiment parameters, not a claim that all real journeys can meet them.
 
 ## What counts as success in the City Commute experiment
 
-The proposed city evaluator separates three outcomes: whether passengers start their **first bus/rail ride within ten minutes** of departure; whether they arrive by their **original ETA plus ten minutes**; and how many passenger-minutes they spend queuing at modeled crowded stops. Walking does not count as first boarding. The original ETA is frozen before any intervention; accepting a different path does not reset it. Final rates divide by all generated passengers, including unserved passengers as failed targets. During playback, passengers whose deadline has not yet arrived remain pending rather than being presented as failures.
+The city evaluator separates three outcomes: whether passengers start their **first bus/rail ride within ten minutes** of departure; whether they arrive by their **original ETA plus ten minutes**; and how many passenger-minutes they spend queuing at modeled crowded stops. Walking does not count as first boarding. The original ETA is frozen before any intervention; accepting a different path does not reset it. Final rates divide by all generated passengers, including unserved passengers as failed targets. Playback distinguishes progress/observed outcomes from the final all-passenger rates.
 
 Crowding uses a transparent model: queue length divided by an assumed stop queue area (bus 25 m², Metro 180 m², BART 400 m²). A density above 1.5 persons/m² triggers modeled crowding exposure. These areas and the threshold are synthetic assumptions, **not surveyed platform dimensions or a safety standard**. Global exposure and queue peaks must be inspected together: moving people to a different crowded stop does not establish success.
 
-The City Commute objective is a separately predefined `city-v2` experiment; it does not replace or retrospectively alter the existing `objective-v1` results:
+The City Commute objective is a separately predefined `city-intent-v2` experiment; it does not replace or retrospectively alter the existing `objective-v1` results:
 
 ```text
 J_city = 0.35 × (1 − fraction first boarding within 10 minutes)
@@ -36,7 +36,34 @@ J_city = 0.35 × (1 − fraction first boarding within 10 minutes)
        + 1,000 × unsafe or infeasible violations
 ```
 
-The city candidate cannot change scoring weights, demand, deadline, compliance, density assumptions, or resource limits. Before a paired experiment, the participant will select demand scale and voluntary-advice acceptance (default 60%). Those settings remain identical across baseline and candidate runs. The extension's proposed fixed standby budget is 12 Muni bus, four Muni Metro, two BART, and one Caltrain vehicle/driver pairs across the network. These are synthetic scenario resources, not actual agency availability. City controls/results are not yet advertised as verified live endpoints.
+The city candidate cannot change scoring weights, demand, deadline, compliance, density assumptions, or resource limits. Before a paired experiment, select `demand_scale` (default 1.0, range 0.25–3.0) and `advisory_acceptance_rate` (default 0.6, range 0–1). These request parameters remain identical across baseline and candidate runs. The fixed standby pool is 12 Muni bus, four Muni Metro, two BART, and one Caltrain vehicle/driver pairs, with a gross supplemental-service budget of **12,000 model cost units**, not dollars. An early development candidate improved journey metrics but overspent and worsened the objective; that finding motivated the fixed budget before the new benchmark. No candidate may expand it or change the frozen weights.
+
+### Architecture, controller policies, and operating rules
+
+Mutations can change agent/tool/context configuration, bounded numerical policies, and up to 12 typed operating rules. A rule contains a stable ID, operator scope, signal, comparison, threshold, action, and priority. Signals are queue/capacity ratio, oldest wait, incoming transfer riders, and time since an unboarded intent began. Supported actions are standby dispatch, transfer boarding priority, and a connection hold of at most five minutes. Rule actions require their tools; incoming-transfer rules require shared context. Unknown keys, arbitrary code, duplicate IDs, incompatible tools, and out-of-bounds values are rejected.
+
+Incoming-transfer forecasts project already-moving riders through explicit walking-transfer edges between platforms, then test whether they can reach the departing service in time. A hold postpones one existing departure; it creates no vehicle or capacity. Actual evaluation counts delayed riders as well as helped transfers. Telemetry records rule evaluations, triggers, executed holds/dispatches, hold minutes, and affected riders. Diagnosis ranks actual denied-boardings and transfer waits by edge/operator, with queue-observation deduplication separate from real cohort denial counts. A small two-minute hold is a testable hypothesis, not a preselected winner.
+
+Rule thresholds are bounded to 0–1,000, priority to 0–10, operator scopes to the four modeled transit types, and hold duration to 1–5 minutes. Examples of mutable policy bounds are urgent wait 3–15 minutes, upstream lookahead 0–60 minutes, advisory ETA allowance 0–10 minutes, regional dispatch pressure 0.1–3.0, and low-load hold fraction 0–0.3. Original journey deadlines remain immutable even if a policy adopts a stricter advice allowance. A typed candidate rule can look like this:
+
+```json
+{
+  "id": "incoming_transfer_hold",
+  "description": "Test a short wait for incoming transfer riders",
+  "signal": "incoming_transfer_riders",
+  "comparator": ">=",
+  "threshold": 1,
+  "scope_operators": ["Muni Bus"],
+  "action": "hold_for_transfer",
+  "max_hold_minutes": 2,
+  "priority": 1,
+  "enabled": true
+}
+```
+
+This requires the `transfer_optimizer` tool and nonlocal context. It defers **one directed segment departure**; downstream segment calendars stay fixed, so riders can miss a later leg. The model does not shift a physical vehicle's entire schedule. That is a plausible timing tradeoff to investigate after the measured hold rejection, not a verified causal explanation of its score.
+
+The planner receives configuration diffs, accept/reject reasons, and persistent lessons within its memory window. Gemini is asked for focused typed changes, receives a 16,384-token output limit, and can repair an invalid structured response once using redacted validation feedback. Actual attempts, errors, provider/model, and token usage are audited; unsuccessful generation still produces a visibly labeled fallback.
 
 ## Run locally
 
@@ -117,9 +144,9 @@ The schema permits only known agents and tools, bounded horizon/replanning/memor
 
 Every iteration diagnoses measured failures, creates a proposal, validates it, evaluates the candidate against its incumbent on matched scenarios/seeds, and records the resulting acceptance or rejection. A favorable prediction from a planner never counts as measured improvement. Historical versions can be inspected and explicitly rolled back.
 
-The development run uses the requested seed. Each candidate is compared with its incumbent on three preselected held-out event-surge seeds: `seed+1001`, `seed+2003`, and `seed+3001`. A commuter control uses `seed+5003`. Promotion requires at least **2% lower mean held-out objective**, **zero candidate feasibility violations**, and **no more than 5% commuter objective regression**. Default evolution runs two iterations. These gates are fixed independently of the planner. The final three-way display reruns all three modes on the original seed; distinguish that demonstration comparison from the held-out promotion scores.
+The current loop uses fixed promotion seeds **1043, 2045, 3043, 4049, and 5051**, plus regression seed **5003**. The development seed must be disjoint from that suite. Promotion requires **at least 2% lower mean objective**, improvement on **at least three of five paired seeds**, **zero feasibility/capacity violations**, and **no more than 5% regression** on the control. Pure simulations run in parallel worker processes; only the parent writes persistence in fixed specification order. Mean, standard deviation, min/max, and each paired seed's metrics are retained. City evolution defaults to three iterations. The final three-way replay uses the development seed and is distinct from promotion-suite evidence. Historical artifacts below used the earlier three-seed gate and remain labeled historical results.
 
-The planner receives observed development failures and prior evaluated proposal acceptance/rejection history, without numerical held-out scores. This allows it to change its architectural hypothesis after a rejected candidate. The same held-out suite is reused across adaptive iterations; it is a promotion benchmark, not an independent statistical claim of generalization. A fresh final test suite would be needed for that claim.
+The planner receives development failures and prior evaluated proposal outcomes, configuration diffs, gate reasons, and persistent lessons. Outcome memory can include measured aggregate improvement and seed-win counts, so it is evaluation feedback. The same promotion suite is reused across adaptive iterations; it is a selection benchmark, not an untouched statistical test of generalization. A fresh final test suite would be needed for that claim.
 
 ## Scenario and data provenance
 
@@ -129,10 +156,10 @@ The compact topology uses approximate real station coordinates and actual intera
 
 | Data | Classification | Default runtime use |
 | --- | --- | --- |
-| Station names, approximate coordinates, transfer geography | Manually curated/derived | Yes |
+| Selected Caltrain and compact-corridor places/transfers | Manually curated/derived | Caltrain connector / historical Event Surge |
 | Headways, travel minutes, segment capacities, fleet/driver constraints | Synthetic assumptions | Yes |
 | Passenger OD demand and fictional disruptions | Seeded synthetic | Yes |
-| SFMTA/BART GTFS stops and shapes | Imported agency reference snapshots | Broad geographic map; no extra simulated demand |
+| SFMTA/BART GTFS stops, route sequences, shapes and variants | Imported agency snapshots | City graph and geographic map; city demand is separately synthetic |
 | 511 GTFS schedules | Optional published observations | Import/archive only; not automatically used by simulator |
 | BART hourly OD ridership | Potential calibration source | Not imported or used in the default demo |
 | SFMTA/Caltrain empirical ridership | Potential calibration source | Not imported or used in the default demo |
@@ -158,15 +185,17 @@ In Atlas Data Explorer, select the configured database and inspect `simulation_r
 
 `GET /harness/proposals` joins persisted proposals with candidate configurations and before/after evaluation history. The inspector can reload this audit trail after a browser refresh instead of depending on the last in-memory job result.
 
+City replay frames use lossless `json-zlib-v1` storage: each document keeps searchable run/minute/time and passenger balance alongside the compressed full JSON payload. Application reads decode the original complete frame, including passenger flows/events. This reduces shared-Sandbox storage without replacing evidence with a summary or fabricated animation.
+
 ## Evaluation and reproducibility
 
 The three comparison modes are static timetable (no intelligent intervention), fixed agents (operational actions with unchanged v1), and recursive harness (operational actions plus evaluated architecture mutations). Matching seeds and a fixed objective distinguish ordinary operational improvement from recursive improvement.
 
-The simulator advances in five-minute intervals. Seeded OD cohorts follow a shortest expected-time path; queues board up to each modeled departure's capacity, and arrivals advance to their next segment. Walking links connect distinct station/operator nodes. Muni standby interventions share a pool of three vehicle/driver pairs, each reserved for a modeled turn cycle. Driver gaps cancel alternate bus departures; the BART disruption cancels alternate departures and adds five minutes to travel. These constraints are deliberately simplified.
+The historical compact Event Surge simulator advances in five-minute intervals. Seeded OD cohorts follow a shortest expected-time path; queues board up to each modeled departure's capacity, and arrivals advance to their next segment. Walking links connect distinct station/operator nodes. Its Muni standby interventions share three vehicle/driver pairs, each reserved for a modeled turn cycle. Driver gaps cancel alternate bus departures; the BART disruption cancels alternate departures and adds five minutes to travel. City Commute instead advances at one-minute intervals and uses the separately described city resources, phased GTFS-derived segment connections, typed policies/rules, and `city-intent-v2` objective.
 
 Passenger delay is arrival time minus the earliest journey on **the same selected path** with undisrupted synthetic headways and unlimited capacity, clipped at zero. The reference is synthetic, not an observed published agency schedule. Unfinished journeys receive an explicit terminal charge `max(0, 420 - reference_arrival_minute + 30)` per passenger. This discourages leaving passengers unserved to improve the reported score. Average delay divides all completed and terminal charges by generated passengers. Transfer failures include capacity denial or waiting longer than a modeled connection headway; denied-boardings congestion counts can include repeated denial of the same passenger.
 
-The fixed lower-is-better objective is:
+The historical Event Surge lower-is-better objective is:
 
 ```text
 J = 0.50 × (average passenger delay / 30 minutes)
@@ -192,16 +221,18 @@ cd frontend
 npm run build
 ```
 
-The standard suite passes 24 isolated tests and skips the two opt-in checks. The actual Atlas integration check also passed. `npm test -- --llm -q` passed 23 tests with the Atlas check skipped, including a real Gemini 3.8 Flash request and parsed validated proposal. Two live browser checks passed, including real Atlas baseline write/read and traces from all three operator controllers. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a successful model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
+Latest local validation passed **43 tests with three external checks skipped**, TypeScript checking, and the Vite build. The publishable-file scan found no actual credentials; `.env` remains untracked. Historical milestones additionally verified real Event Surge Atlas write/read, a real Gemini 3.8 Flash proposal, and live browser integration. Those historical external checks do not establish new city integration. Live UI checks default to port 5175 and accept `BAYFLOW_UI_URL` to override the address. Provider configuration alone is not proof of a model call: inspect the proposal's `planner.kind`, provider/model, and token metadata.
 
 Run the entire recursive loop without a browser (official Sandbox required):
 
 ```bash
-.venv/bin/python scripts/evaluate.py --seed 42 --iterations 2 --output demo/results-atlas.json
+.venv/bin/python scripts/evaluate.py --scenario city_commute --seed 42 --iterations 3 --output demo/evaluation-city-rules-atlas.json
 # Reproducible rule-based planner; still uses Atlas by default.
-.venv/bin/python scripts/evaluate.py --rule-based --seed 42 --iterations 2
+.venv/bin/python scripts/evaluate.py --scenario city_commute --rule-based --seed 42 --iterations 3
 # Explicit isolated preview, with no database eligibility claim.
-.venv/bin/python scripts/evaluate.py --offline --rule-based --seed 42 --iterations 2
+.venv/bin/python scripts/evaluate.py --scenario city_commute --offline --rule-based --seed 42 --iterations 3 --output demo/evaluation-city-rules-offline.json
+# Preserve the historical compact scenario when that is what you intend to evaluate.
+.venv/bin/python scripts/evaluate.py --scenario event_surge --seed 42 --iterations 2
 ```
 
 The CLI prints real stage updates to stderr and measured results to stdout. `--output` saves the summary, not a video or proof of external publication. Repeated Atlas runs start from the current persisted harness; inspect version history or roll back to v1 when you need a fresh v1 comparison. Rollback records a decision; rejected candidates cannot be activated.
@@ -229,10 +260,10 @@ Example requests while the backend is running:
 curl -sS http://127.0.0.1:8000/database/status
 curl -sS -X POST http://127.0.0.1:8000/simulation/run \
   -H 'Content-Type: application/json' \
-  -d '{"mode":"fixed","seed":42,"scenario":"event_surge"}'
+  -d '{"mode":"fixed","seed":42,"scenario":"city_commute","demand_scale":1.0,"advisory_acceptance_rate":0.6}'
 curl -sS -X POST http://127.0.0.1:8000/harness/evolve \
   -H 'Content-Type: application/json' \
-  -d '{"seed":42,"iterations":2,"use_llm":true}'
+  -d '{"scenario":"city_commute","seed":42,"iterations":3,"use_llm":true,"demand_scale":1.0,"advisory_acceptance_rate":0.6}'
 # Substitute the actual returned job_id; poll until completed or failed.
 curl -sS http://127.0.0.1:8000/jobs/ACTUAL_JOB_ID
 curl -sS -X POST http://127.0.0.1:8000/harness/rollback \
@@ -241,7 +272,33 @@ curl -sS -X POST http://127.0.0.1:8000/harness/rollback \
 
 Long-running operations return HTTP 202 with a job ID. Polling `/jobs` reflects backend progress rather than cosmetic frontend stages. Only one evolution/rollback can run at once. An explicit request `offline:true` selects in-memory preview; historical query endpoints accept `?offline=true` for that store. Preview data disappears when the process exits. Job results are available in the running process; after restart inspect persisted run/evaluation endpoints instead.
 
-## Measured offline results
+## City evidence and verification status
+
+The [completed city offline artifact](demo/evaluation-city-rules-offline.json) preserves three actual rule-based proposals, complete configuration diffs, paired metrics/distributions, and rule telemetry. All three were rejected by the unchanged gate:
+
+| Candidate hypothesis | Mean promotion-suite improvement | Seeds improved | Decision |
+| --- | ---: | ---: | --- |
+| v2: neighbor context and two-minute incoming-transfer hold | −4.201133% | 0 / 5 | Rejected: objective worsened |
+| v3: regional frequency coordination, urgent wait at six minutes | −5.844837% | 0 / 5 | Rejected: objective worsened |
+| v4: regional frequency coordination, five-minute replanning | +1.206022% | 4 / 5 | Rejected: below the 2% mean-improvement gate |
+
+The hold was executable rather than decorative: recorded candidate telemetry includes **5,107 rule evaluations, 233 triggers, 74 actual holds, 97 hold minutes, and 5,181 affected-rider event counts**. Trigger counts differ from executed holds because calendars, transfer arrival windows, and physical constraints still apply. Affected-rider counts can include repeated effects on a person; they are not unique passenger counts. The hypothesis's measured harm is retained.
+
+All modes generated **9,761 passengers**. The selected champion remains v1, so its result equals fixed agents:
+
+| Seed-42 city metric | Static timetable | Fixed agents / retained v1 |
+| --- | ---: | ---: |
+| Objective | 0.466728 | 0.445556 |
+| First transit boarding within ten minutes | 49.9232% | 52.6688% |
+| Arrival by original ETA plus ten minutes | 55.5066% | 58.3239% |
+| Unserved passengers | 2,736 | 2,380 |
+| Missed transfers | 689 | 615 |
+| Crowd exposure, passenger-minutes | 198,733 | 152,755 |
+| Additional operating cost, model units | 0 | 5,940 |
+
+These are synthetic-model measurements, not observed San Francisco performance. The recursive mechanism worked, but the tested city mutations did **not** clear its promotion gate. An earlier trial exposed a repeated-fallback proposal bug; the final artifact reflects the corrected distinct hypotheses. New city Gemini-plus-Atlas verification is currently blocked by network access in this session; run the documented Atlas command in a network-enabled terminal. Do not relabel historical Event Surge database/model proof as a successful city evaluation. Supply/guidance ablations and acceptance sweeps are not claimed complete.
+
+## Historical Event Surge results
 
 [The preserved evaluation artifact](demo/evaluation-offline.json) contains actual rule-based planner results from a fresh offline seed-42, two-iteration run. Its UUIDs identify the executed offline runs; they are not Atlas document evidence. Both candidates were rerun under the fixed evaluator: neighbor coordination v2 improved mean promotion-suite objective only **0.83%** and was rejected; a subsequent regional shared-context v3 with 60-minute horizon and five-minute replanning improved it **22.23%** and was promoted. The planner selected this second mutation after observing residual failures and the previous rejection.
 
@@ -283,7 +340,7 @@ New project code is [MIT licensed](LICENSE). Third-party libraries retain their 
 
 The default transit view now uses a real, interactive San Francisco street map with OpenStreetMap attribution. Official agency GTFS reference layers include **3,238 Muni stop records, 50 BART parent stations, 58 Muni bus routes, 7 tram/Metro routes and 3 cable-car routes**. The map provides bus/rail/BART visibility controls, route inspection, station/stop search, and San Francisco/corridor/Bay Area zoom presets. Bus stops appear at neighborhood zoom to keep the map readable. Muni/BART simulated vehicles follow matching GTFS shape segments where available; Caltrain remains a simplified connector.
 
-These broader layers provide geographic context. The operational simulation remains the documented 21-node corridor. No extra reference stop is assigned fabricated simulation demand. The current agency downloads returned feeds with validity ending August 28 and August 30, 2026; those dates are visible and the layers are not advertised as current or live service. Source URLs, timestamps, SHA-256 checksums and transformations are embedded in the JSON. See [data attribution and provider terms](frontend/public/data/ATTRIBUTION.md). Agency data is excluded from the MIT software license.
+The city simulator now derives directed operating connections from actual GTFS stop sequences, including route shape/service variants, and adds bounded estimated walking interchanges plus selected Caltrain links. Its 3,292-node/8,369-edge graph receives explicitly synthetic neighborhood and route-local commute demand; the compact Event Surge graph remains separate. The current agency downloads returned feeds with validity ending August 28 and August 30, 2026; those dates are visible and the data is not advertised as current or live service. Route headways, departure phases, speeds, and capacities are modeled rather than today's full GTFS calendar. Source URLs, timestamps, SHA-256 checksums and transformations are embedded in the JSON. See [data attribution and provider terms](frontend/public/data/ATTRIBUTION.md). Agency data is excluded from the MIT software license.
 
 Rebuild the map dataset after downloading fresh agency ZIP files:
 

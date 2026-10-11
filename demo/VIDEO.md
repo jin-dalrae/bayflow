@@ -1,25 +1,25 @@
 # One-minute recording
 
-Only record after the real backend evaluation finishes and the Atlas indicator confirms read/write. Use the displayed measured values; do not substitute target improvements. If a mutation is rejected, show the rejection and explain its gate.
+No video has been recorded or uploaded. This is the recording plan for the current City Commute experiment. Public code: <https://github.com/jin-dalrae/bayflow>.
 
-The public repository is <https://github.com/jin-dalrae/bayflow>. No video has been recorded or uploaded yet. Actual official Atlas integration and a persisted evolution run passed; inspect `demo/evaluation-atlas.json` and recheck the live indicator before recording. The separate `demo/evaluation-offline.json` remains an explicitly labeled reproducibility artifact.
-
-`demo/evaluation-gemini-atlas.json` provides the strongest completed proof: real Gemini generated and promoted v4, while the second invalid model response triggered a labeled fallback whose v5 was rejected. Show the actual planner labels. The champion's seed-42 objective improved 21.33%, at operating cost 810 → 990; the mean promotion-suite improvement was 22.23%.
+Use the actual completed `demo/evaluation-city-rules-offline.json`, labeled rule-based/offline, until a real city Gemini-plus-Atlas artifact exists. Historical Event Surge external proof is `demo/evaluation-gemini-atlas.json`; its promotion is not a city result.
 
 | Time | Screen | Exact narration |
 | --- | --- | --- |
-| 0–10 s | Transit network and project name | “BayFlow is an AI transit operations system that learns to redesign how it manages a city. Interconnected services need more than isolated dispatch decisions.” |
-| 10–20 s | Fixed-agent replay; scrub to event surge | “This seeded, synthetic Bay Area evening combines fictional stadium crowds, a driver shortage, and a BART delay. Passenger queues and missed transfers come from a running simulator.” |
-| 20–35 s | Click Evolve Harness; show proposal/configuration diff | “The planner reviews failure traces and proposes changes to the harness itself: its coordination, context, tools, and planning policy. A schema limits what can change.” |
-| 35–50 s | Completed evaluation and adoption decision | “The backend reruns the candidate on matched seeds. An independent, fixed evaluator measures delay, transfers, congestion, and operating cost. The actual result determines whether the version is promoted or rejected.” |
-| 50–60 s | Version history and Atlas records | “MongoDB Atlas preserves the proposal, simulations, evaluation, and decision for audit and rollback. BayFlow doesn't just optimize transit. It learns how to optimize.” |
+| 0–10 s | City map / passenger inspector | “BayFlow tests how to help commuters board within ten minutes and arrive near their original ETA. The geography is imported GTFS; passengers and operations are synthetic.” |
+| 10–20 s | First boarding / frozen ETA / crowding | “We measure actual boarding, arrivals, and crowd exposure. Service changes and voluntary detours must respect destinations, deadlines, consent, and fixed resources.” |
+| 20–35 s | Evolve / typed rule diff / action telemetry | “The harness rewrites its coordination, policies, and typed rules. This candidate really held departures: seventy-four holds, ninety-seven minutes. Ordinary code simulates every consequence.” |
+| 35–50 s | Three candidates / paired-seed gate | “Five paired seeds rejected the hold and another service policy. Faster planning won four seeds, but its one-point-two-percent mean gain missed the unchanged two-percent gate. The original version stayed active.” |
+| 50–60 s | Evidence / planner and persistence labels | “This completed city result is offline and rule-based. Historical Event Surge records separately prove real Gemini mutation and Atlas persistence. BayFlow tests how it learns to optimize.” |
+
+If the city Atlas/model run finishes before recording, replace the final sentence only with its **actual** planner, result and persisted readback. Do not invent a promotion or describe a fallback as model-generated.
 
 Recording checklist:
 
-- Use the organizer's Sandbox; show a successful persistence indicator and an actual Atlas document.
-- Set browser zoom so proposal text and results are readable; hide terminals containing secrets.
-- Record the complete evolution beforehand if model latency exceeds the shot; disclose edits/time compression.
-- Mention the planner label shown by the UI: model-driven or rule-based fallback.
-- Read only the actual result. Do not promise an accepted mutation before its gate completes.
-- Keep raw footage, record screen plus voice, export approximately 60 seconds, and manually upload before submission.
-- Confirm public repository URL and submission link manually; this file is a recording plan, not an uploaded video.
+- Pre-run the genuine evaluation; show real results and disclose edited/time-compressed waiting.
+- Keep metric text, rule diffs and planner/store labels readable.
+- Show the original ETA remains fixed after advice; distinguish predictions from arrivals.
+- Avoid terminals or UI panels containing credentials.
+- Include the failed hypotheses and unchanged gate; rejection demonstrates automatic version selection.
+- If showing Atlas, identify whether records belong to the new city run or historical Event Surge.
+- Keep raw footage, export approximately 60 seconds, upload manually, and supply the actual video link.
