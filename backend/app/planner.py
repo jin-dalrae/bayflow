@@ -89,6 +89,146 @@ def diagnose(run):
                 if any(word in key for word in ("missed", "unserved", "queue", "delay", "denial", "boarding", "eta_", "crowding"))}}
 
 
+# One hypothesis per candidate: a single knob, rule or capability plus the companion
+# fields the schema requires (for example a transfer hold needs its tool and context).
+MAX_CHANGED_FIELDS = 3
+TRANSIT_OPERATORS = ("Muni Bus", "Muni Metro", "BART", "Caltrain")
+
+
+def changed_fields(current, candidate):
+    """Configuration paths a candidate changes; agent/tool order is irrelevant."""
+    a = current.model_dump(exclude={"version"})
+    b = candidate.model_dump(exclude={"version"})
+    paths = []
+    for key in a:
+        if key in ("policy", "rules"):
+            continue
+        before, after = a[key], b[key]
+        if key in ("active_agents", "active_tools"):
+            before, after = sorted(before), sorted(after)
+        if before != after:
+            paths.append(key)
+    paths += [f"policy.{key}" for key in a["policy"] if a["policy"][key] != b["policy"][key]]
+    before_rules = {rule["id"]: rule for rule in a["rules"]}
+    after_rules = {rule["id"]: rule for rule in b["rules"]}
+    paths += [f"rules.{rule_id}" for rule_id in sorted(set(before_rules) | set(after_rules))
+              if before_rules.get(rule_id) != after_rules.get(rule_id)]
+    return paths
+
+
+def city_plan(current, failure, history=None):
+    """Pick the most relevant single-hypothesis move that has not been tested yet."""
+    metrics = failure["metrics"]
+    edges = failure.get("top_failure_edges", [])
+    operators = [row["operator"] for row in edges if row["operator"] in TRANSIT_OPERATORS]
+    focus = operators[0] if operators else "Muni Bus"
+    top = edges[0] if edges else {}
+    slug = focus.lower().replace(" ", "_")
+    boarded = metrics.get("boarding_within_10_minutes_rate", 0)
+    missed = metrics.get("missed_transfers", 0)
+    evidence = (f"{boarded:.0%} of riders boarded within 10 minutes; the worst segment "
+                f"({top.get('operator', focus)} {top.get('service') or ''}) recorded "
+                f"{top.get('denied_boardings', 0)} denied boardings").replace("  ", " ")
+    policy = current.policy
+    coordinated = current.coordination_mode != "decentralized"
+
+    def rule(rule_id, action, signal, threshold, description, hold=0):
+        return dict(id=rule_id, description=description, signal=signal, comparator=">=",
+                    threshold=threshold, scope_operators=[focus], action=action,
+                    max_hold_minutes=hold, priority=1.0, enabled=True)
+
+    def with_tools(*tools):
+        return sorted(set(current.active_tools) | set(tools))
+
+    def with_coordinator():
+        return dict(active_agents=sorted(set(current.active_agents) | {"regional_coordinator"}),
+                    coordination_mode=current.coordination_mode if coordinated else "hub_and_spoke")
+
+    moves = [
+        ("earlier_local_dispatch",
+         dict(policy=dict(dispatch_threshold_local=round(max(0.2, policy.dispatch_threshold_local - 0.2), 4))),
+         f"Dispatch standby vehicles earlier: lower the local queue/capacity trigger from {policy.dispatch_threshold_local} to {round(max(0.2, policy.dispatch_threshold_local - 0.2), 4)}."),
+        ("queue_dispatch_rule",
+         dict(rules=[rule(f"{slug}_queue_dispatch", "standby_dispatch", "edge_queue_ratio", 0.9,
+                          f"Dispatch a standby {focus} vehicle when a segment queue reaches 90% of a departure's capacity.")]),
+         f"Add one standby-dispatch rule scoped to {focus}, where denials concentrate."),
+        ("earlier_urgency",
+         dict(policy=dict(urgent_wait_minutes=max(3, policy.urgent_wait_minutes - 2))),
+         f"Treat waits as urgent after {max(3, policy.urgent_wait_minutes - 2)} minutes instead of {policy.urgent_wait_minutes}, so riders near the 10-minute target are served first."),
+        ("faster_replanning",
+         dict(replanning_interval_minutes=max(5, current.replanning_interval_minutes - 5)),
+         f"Replan every {max(5, current.replanning_interval_minutes - 5)} minutes instead of {current.replanning_interval_minutes} to react before boarding deadlines pass."),
+        ("older_riders_first",
+         dict(policy=dict(age_weight=round(min(1.0, policy.age_weight + 0.15), 4))),
+         "Weight waiting time more heavily when allocating vehicles, so long-waiting riders board first."),
+    ]
+    if missed > 0:
+        moves += [
+            ("transfer_priority_rule",
+             dict(active_tools=with_tools("transfer_optimizer"),
+                  rules=[rule(f"{slug}_transfer_priority", "transfer_boarding_priority", "edge_queue_ratio", 0.8,
+                              f"Board transferring riders first on crowded {focus} segments.")]),
+             f"{missed} transfers were missed; board transferring riders first on crowded {focus} segments."),
+            ("transfer_hold_rule",
+             dict(active_tools=with_tools("transfer_optimizer"),
+                  context_policy="transfer_neighbors" if current.context_policy == "local_only" else current.context_policy,
+                  rules=[rule(f"{slug}_transfer_hold", "hold_for_transfer", "incoming_transfer_riders", 5,
+                              f"Hold a {focus} departure up to two minutes when five or more connecting riders are arriving.", hold=2)]),
+             f"{missed} transfers were missed; hold a {focus} departure briefly for incoming connecting riders."),
+        ]
+    moves += [
+        ("frequency_coordination",
+         dict(**with_coordinator(), active_tools=with_tools("regional_coordination", "service_frequency_optimizer")),
+         "Let a regional coordinator shift service frequency between operators within the same fleet and budget."),
+        ("route_advice",
+         dict(**with_coordinator(), active_tools=with_tools("regional_coordination", "passenger_advisory")),
+         "Let a regional coordinator offer riders a less crowded valid route; destinations and original ETAs stay fixed."),
+        ("longer_lookahead",
+         dict(policy=dict(upstream_lookahead_minutes=min(60, policy.upstream_lookahead_minutes + 15))),
+         "Look further upstream when estimating arriving demand before dispatching."),
+    ]
+    if coordinated:
+        moves.append(("no_low_load_skips", dict(policy=dict(hold_load_fraction=0.0)),
+                      "Stop skipping low-load departures; skipped runs may push riders past the 10-minute target."))
+
+    tried = []
+    for item in history or []:
+        try:
+            tried.append(HarnessConfig.model_validate(item.get("candidate", {})).model_dump(exclude={"version"}))
+        except Exception:
+            continue
+    base = current.model_dump()
+    for name, change, rationale in moves:
+        candidate = dict(base, policy=dict(base["policy"]), rules=list(base["rules"]))
+        for key, value in change.items():
+            if key == "policy":
+                candidate["policy"].update(value)
+            elif key == "rules":
+                ids = {item["id"] for item in value}
+                candidate["rules"] = [item for item in candidate["rules"] if item["id"] not in ids] + value
+            else:
+                candidate[key] = value
+        try:
+            config = HarnessConfig(**candidate)
+        except Exception:
+            continue
+        behaviour = config.model_dump(exclude={"version"})
+        if behaviour == current.model_dump(exclude={"version"}) or behaviour in tried or len(config.rules) > 12:
+            continue
+        return MutationProposal(
+            diagnosis=f"{evidence}. Hypothesis '{name}' is the most relevant single change not yet tested.",
+            rationale=f"{rationale} Only this hypothesis changes, so the held-out result is attributable to it.",
+            expected_improvement="Raise the share of riders boarding within 10 minutes or arriving by ETA + 10 without changing demand, deadlines, consent, resources or the evaluator.",
+            confidence=0.5, candidate=config)
+    step = round(min(1.0, policy.persistence_weight + 0.005), 4)
+    candidate = dict(base, policy=dict(base["policy"], persistence_weight=step))
+    return MutationProposal(
+        diagnosis=f"{evidence}. Every single-change hypothesis in the menu has been tested.",
+        rationale="Nudge queue-persistence weighting as a small residual hypothesis.",
+        expected_improvement="Small residual improvement in waiting-rider allocation.",
+        confidence=0.3, candidate=HarnessConfig(**candidate))
+
+
 def rule_plan(current, failure, history=None):
     candidate = current.model_dump()
     metrics = failure["metrics"]
@@ -108,73 +248,7 @@ def rule_plan(current, failure, history=None):
         if ("missed" in k or "delay" in k) and isinstance(v, (float, int))
     )
     if "boarding_within_10_minutes_rate" in metrics:
-        missed = metrics.get("missed_transfers", 0)
-        rules = candidate["rules"]
-        rejected_holds = any(not item.get("accepted") and any(
-            rule.get("action") == "hold_for_transfer" for rule in item.get("candidate", {}).get("rules", []))
-            for item in (history or []))
-        has_hold = any(rule["action"] == "hold_for_transfer" and rule.get("enabled", True) for rule in rules)
-        if missed > 0 and not has_hold and not rejected_holds and len(rules) < 12:
-            observed = [row["operator"] for row in failure.get("top_failure_edges", [])
-                        if row["operator"] in {"Muni Bus", "Muni Metro", "BART", "Caltrain"}]
-            scope = sorted(set(observed)) or ["Muni Bus", "Muni Metro", "BART", "Caltrain"]
-            rate = missed / max(1, metrics.get("transfer_opportunities", 1))
-            threshold = max(1, min(10, math.ceil(rate * 10)))
-            candidate.update(coordination_mode="hub_and_spoke" if current.coordination_mode == "decentralized" else current.coordination_mode,
-                             context_policy="transfer_neighbors" if current.context_policy == "local_only" else current.context_policy)
-            candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
-            candidate["active_tools"] = sorted(set(current.active_tools) | {"transfer_optimizer", "regional_coordination"})
-            rule_id = "incoming_transfer_hold"
-            existing_ids = {rule["id"] for rule in rules}
-            if rule_id in existing_ids:
-                rules = [rule for rule in rules if rule["id"] != rule_id]
-            candidate["rules"] = rules + [dict(id=rule_id,
-                description=f"Test a two-minute hold for incoming transfer riders after {missed} measured missed transfers.",
-                signal="incoming_transfer_riders", comparator=">=", threshold=threshold,
-                scope_operators=scope, action="hold_for_transfer", max_hold_minutes=2, priority=1.0, enabled=True)]
-            diagnosis = f"The development run recorded {missed} missed transfers; existing rules lack a bounded incoming-rider connection hold."
-            rationale = f"Test an incoming-transfer threshold of {threshold} riders and a maximum two-minute hold, with neighbor context/tool authorization. Actual held-out results decide whether the timing tradeoff helps."
-        elif metrics["boarding_within_10_minutes_rate"] < .95 and "service_frequency_optimizer" not in current.active_tools:
-            candidate.update(coordination_mode="regional", context_policy="regional_shared")
-            candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
-            candidate["active_tools"] = sorted(set(current.active_tools) | {"regional_coordination", "service_frequency_optimizer"})
-            rejected_frequency = any(not item.get("accepted") and "service_frequency_optimizer" in item.get("candidate", {}).get("active_tools", []) for item in (history or []))
-            if rejected_frequency:
-                candidate["replanning_interval_minutes"] = max(5, current.replanning_interval_minutes - 10)
-            else:
-                candidate["policy"]["urgent_wait_minutes"] = max(3, current.policy.urgent_wait_minutes - 1)
-            diagnosis = "Riders are missing the 10-minute first-boarding target; local service allocation does not prioritize waiting riders across providers."
-            rationale = ("A slower service-frequency proposal was rejected; test faster replanning to act before deadlines within the same fleet and budget." if rejected_frequency else "Test shared service-frequency allocation and trigger urgent waits one minute earlier within unchanged resources and gross operating budget.")
-        elif metrics.get("crowding_exposure_passenger_minutes", 0) > 0 and "passenger_advisory" not in current.active_tools:
-            candidate.update(coordination_mode="regional", context_policy="regional_shared")
-            candidate["active_agents"] = sorted(set(current.active_agents) | {"regional_coordinator"})
-            candidate["active_tools"] = sorted(set(current.active_tools) | {"regional_coordination", "passenger_advisory"})
-            diagnosis = "Recorded queue crowding remains; the current tool set cannot offer voluntary feasible alternatives."
-            rationale = "Test advisory access and shared observed pressure. Keep destinations, original ETA, consent draws and evaluator frozen."
-        else:
-            queue_peak = max((row["peak_observed_queue"] for row in failure.get("top_failure_edges", [])), default=0)
-            change = .05 if queue_peak > 0 and metrics["boarding_within_10_minutes_rate"] < .95 else -.05
-            policy = candidate["policy"]
-            policy["age_weight"] = round(max(0, min(1, current.policy.age_weight + change)), 4)
-            if history and not history[-1].get("accepted", True):
-                policy["dispatch_threshold_regional"] = round(min(3, current.policy.dispatch_threshold_regional + .1), 4)
-            diagnosis = "Residual observed queues and prior proposal outcomes require a smaller controller-policy hypothesis rather than repeating an architectural bundle."
-            rationale = "Test bounded age-priority tuning; after rejection, raise dispatch pressure threshold to reduce speculative reserve use. Independent evaluation preserves failed hypotheses."
-        # Version IDs do not make an old policy hypothesis new. Avoid repeats
-        # by testing a bounded age-priority increment justified by residual waits.
-        tried=[]
-        for item in history or []:
-            try:
-                prior=HarnessConfig.model_validate(item.get("candidate", {})).model_dump(exclude={"version"})
-                tried.append(prior)
-            except Exception:
-                continue
-        while HarnessConfig.model_validate(candidate).model_dump(exclude={"version"}) in tried and candidate["policy"]["age_weight"]<1:
-            candidate["policy"]["age_weight"]=round(min(1,candidate["policy"]["age_weight"]+.05),4)
-            rationale += " This architecture/cadence was previously tested; add a bounded age-priority increment to form a distinct residual-wait hypothesis."
-        return MutationProposal(diagnosis=diagnosis, rationale=rationale,
-            expected_improvement="Improve fixed journey targets or transfer reliability without changing demand, deadlines, consent, physical limits or evaluator.",
-            confidence=.55, candidate=HarnessConfig(**candidate))
+        return city_plan(current, failure, history)
     if (
         current.context_policy == "local_only"
         and has_delay
@@ -278,7 +352,7 @@ def propose(current, run, use_llm=True, history=None):
         provider = "gemini" if gemini_key else "anthropic"
     system = (
         "Review a transit multi-agent harness using only measured development failures and evaluated proposal history. "
-        "Return a full typed candidate with about four focused, justified configuration/policy/rule changes, preserving all other fields. "
+        "Return a full typed candidate that tests exactly one hypothesis: one policy parameter, one rule, or one capability, plus only the companion fields the schema requires. At most 3 configuration fields may change (agents and tools count as one field each); preserve all other fields. "
         "Prefer a falsifiable smaller hypothesis over enabling every feature. Policy contains bounded controller thresholds; rules are declarative "
         "signal/comparator/threshold/operator-scope/action objects, never code. A rule requires its action tool; incoming_transfer_riders requires shared context. "
         "For missed transfers consider a bounded incoming-rider hold, checking the cost of delaying already-boarded riders. "
@@ -304,6 +378,9 @@ def propose(current, run, use_llm=True, history=None):
         return node
     schema=without_max_items(schema)
     def supported(proposal):
+        changes = changed_fields(current, proposal.candidate)
+        if len(changes) > MAX_CHANGED_FIELDS:
+            raise ValueError(f"Candidate changes {len(changes)} fields ({', '.join(changes)}); test one hypothesis with at most {MAX_CHANGED_FIELDS} changed fields, counting required companion fields.")
         if run.get("scenario")=="city_commute" and ("demand_forecast" in proposal.candidate.active_tools or "demand_forecaster" in proposal.candidate.active_agents or proposal.candidate.optimization_strategy=="regional_predictive"):
             raise ValueError("City commute has no executable demand_forecast/demand_forecaster/regional_predictive capability")
         return proposal

@@ -14,6 +14,7 @@ from .city_network import get_city_network, get_city_demand_pairs
 from .agents import OPERATOR_AGENTS, create_operator_controllers, transfer_priority
 from .city_scenarios import get_city_scenario, active_profile_events
 
+STANDBY_RUN_MINUTES = 20
 CITY_EVALUATOR = {
     "version": "city-intent-v2",
     "demand_model": "citywide-27-neighborhoods-9-centers",
@@ -73,6 +74,17 @@ def simulate_city(
     net = get_city_network(horizon_minutes=horizon_minutes)
     nodes = {n["id"]: n for n in net["nodes"]}
     edges = {e["id"]: e for e in net["edges"]}
+    # A dispatched standby vehicle keeps running along its route for a short trip,
+    # rather than carrying riders one stop-to-stop hop and vanishing.
+    starts = {(e.get("route_id"), e.get("direction"), e["source"]): e["id"]
+              for e in net["edges"] if e.get("route_id") and e["operator"] != "walk"}
+    next_on_route = {}
+    for e in net["edges"]:
+        if e.get("route_id") and e["operator"] != "walk":
+            following = starts.get((e["route_id"], e.get("direction"), e["target"]))
+            if following and following != e["id"]:
+                next_on_route[e["id"]] = following
+    standby_runs = defaultdict(dict)
     adjacency = defaultdict(list)
     for edge in edges.values():
         adjacency[edge["source"]].append(edge)
@@ -429,6 +441,11 @@ def simulate_city(
             if v["arrival"] > minute:
                 remaining.append(v)
                 continue
+            following = next_on_route.get(v["edge_id"])
+            if v.get("standby_left") is not None and following:
+                left = v["standby_left"] - edges[following]["travel_minutes"]
+                if left >= 0:
+                    standby_runs[minute][following] = max(left, standby_runs[minute].get(following, -1))
             for c in v["cohorts"]:
                 e = edges[c.path[c.step]]
                 log(
@@ -675,7 +692,8 @@ def simulate_city(
                             harness_version=config.version,
                         )
                     )
-        supplements = set()
+        run_left = standby_runs.pop(minute, {})
+        supplements = set(run_left)
         if (
             mode != "static"
             and "local_dispatch_optimizer" in config.active_tools
@@ -757,7 +775,8 @@ def simulate_city(
                 ):
                     continue
                 supplements.add(eid)
-                reserve[op].append(minute + max(15, e["travel_minutes"] * 2 + 5))
+                run_left[eid] = max(run_left.get(eid, -1), STANDBY_RUN_MINUTES - e["travel_minutes"])
+                reserve[op].append(minute + 2 * STANDBY_RUN_MINUTES + 5)
                 extra_cost += price[op]
                 gross_dispatch_cost += price[op]
                 extra_departures += 1
@@ -1015,6 +1034,7 @@ def simulate_city(
                         arrival=minute + duration,
                         capacity=e["capacity"],
                         cohorts=carried,
+                        standby_left=run_left.get(eid) if eid in supplements and index == len(packs) - 1 else None,
                     )
                 )
         node_queues = defaultdict(int)

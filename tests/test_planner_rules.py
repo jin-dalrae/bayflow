@@ -38,20 +38,36 @@ def test_gemini_schema_failure_is_repaired_once_with_feedback(monkeypatch):
     assert proposal.candidate==HarnessConfig()
 
 
-def test_rejected_frequency_candidate_gets_distinct_replanning_hypothesis():
-    current=HarnessConfig();failure=diagnose(run())
-    # A rejected hold is not repeated; a rejected slow frequency test changes cadence.
-    hold=rule_plan(current,failure).candidate
-    first=rule_plan(current,failure,[{'accepted':False,'candidate':hold.model_dump()}]).candidate
-    next_plan=rule_plan(current,failure,[{'accepted':False,'candidate':hold.model_dump()},{'accepted':False,'candidate':first.model_dump()}]).candidate
-    assert first.model_dump()!=next_plan.model_dump()
-    assert next_plan.replanning_interval_minutes==5
-
-
-def test_fallback_does_not_repeat_a_third_rejected_cadence():
-    current=HarnessConfig();failure=diagnose(run());history=[];candidates=[]
-    for _ in range(4):
+def test_fallback_tests_one_untried_hypothesis_at_a_time():
+    from backend.app.planner import changed_fields, MAX_CHANGED_FIELDS
+    current=HarnessConfig();failure=diagnose(run());history=[];seen=[]
+    for _ in range(8):
         candidate=rule_plan(current,failure,history).candidate
         behavior=candidate.model_dump(exclude={'version'})
-        assert behavior not in candidates
-        candidates.append(behavior);history.append({'accepted':False,'candidate':candidate.model_dump()})
+        assert behavior not in seen
+        assert 1<=len(changed_fields(current,candidate))<=MAX_CHANGED_FIELDS
+        seen.append(behavior);history.append({'accepted':False,'candidate':candidate.model_dump()})
+
+
+def test_first_fallback_changes_a_single_policy_knob():
+    from backend.app.planner import changed_fields
+    candidate=rule_plan(HarnessConfig(),diagnose(run())).candidate
+    assert changed_fields(HarnessConfig(),candidate)==['policy.dispatch_threshold_local']
+
+
+def test_bundled_llm_candidate_is_rejected_then_fallback_is_labeled(monkeypatch):
+    from google import genai
+    bundle=HarnessConfig(coordination_mode='regional',context_policy='regional_shared',replanning_interval_minutes=5,
+        active_agents=['muni_agent','bart_agent','caltrain_agent','regional_coordinator'],
+        active_tools=['local_dispatch_optimizer','regional_coordination','service_frequency_optimizer']).model_dump()
+    reply=dict(candidate=bundle,diagnosis='Measured failures suggest regional coordination.',rationale='Enable several coordination features together.',expected_improvement='Better service.',confidence=.5)
+    class Client:
+        def __init__(self,**kwargs):self.models=self
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def generate_content(self,**kwargs):return SimpleNamespace(text=json.dumps(reply),usage_metadata=None,model_version='test')
+    monkeypatch.setenv('LLM_PROVIDER','gemini');monkeypatch.setenv('GEMINI_API_KEY','test-key-not-a-secret')
+    monkeypatch.setattr(genai,'Client',Client)
+    proposal,meta=propose(HarnessConfig(),run(),use_llm=True)
+    assert meta['kind']=='rule_based' and meta['attempts']==2
+    assert 'at most 3 changed fields' in meta['validation_errors'][0]['message']
