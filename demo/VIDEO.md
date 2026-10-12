@@ -1,8 +1,8 @@
 # One-minute recording
 
-A 64-second video was recorded on October 11, 2026 from a live City Commute run against the organizer Atlas Sandbox (`persistence=atlas`). It is saved locally as `output/bayflow-demo.mp4` (not committed). Add its uploaded URL to the submission form. Public code: <https://github.com/jin-dalrae/bayflow>.
+**Current video (v36, 79 s):** recorded from the live read-only site <https://bayflow.dalrae-jin-work.workers.dev>, which replays the stored MongoDB Atlas run under `city-intent-v3`. Saved locally as `output/bayflow-demo-v36.mp4` (not committed). Narration, every figure from that run: the service monitor triggered at 4:45 PM with 70% of matured riders boarded within ten minutes (target 80%); Gemini 3.8 Flash, citing earlier bundled failures, proposed one change (local dispatch trigger 1.2 → 0.8); it won all five unseen days (+3.04%) and was promoted as v36; held-out boarding within ten minutes rose 68.9% → 69.9% and on-time arrivals 75.4% → 76.4%; Gemini's next two changes were rejected.
 
-Recorded narration, every figure from that run: the service monitor triggered at 4:45 PM with 59% of matured riders boarded within ten minutes; the rule-based fallback planner proposed three candidates adding a regional coordinator (v21–v23); all were rejected (best: 4 of 5 held-out days, +1.2%, under the 2% gate); v1 stayed active. The simulation wait is sped up 10× and labeled on screen. The candidate v21 replay shows the coordinator and Muni agent exchanging a skip-departure request.
+**Earlier video (64 s, superseded):** recorded before the planner, demand and evaluator fixes; its rule-based candidates were all rejected and v1 stayed active.
 
 The table below is the earlier recording plan.
 

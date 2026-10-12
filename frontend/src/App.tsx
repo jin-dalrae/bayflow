@@ -311,7 +311,7 @@ export default function App() {
     return e ? { route: `${String(e.operator).replace(/ Bus| Metro/, "")} ${e.service || ""}`.trim(), from: nodeName(e.source), to: nodeName(e.target) } : { route: id, from: "", to: "" };
   };
   const version = (d: Data) => d.candidate?.version || d.proposal?.candidate?.version || "candidate";
-  const loop = buildLoopMessages({ job, result, busy, action, history: historicalDecisions.filter(d=>!d.scenario || d.scenario === scenario), time });
+  const loop = buildLoopMessages({ job, result, busy, action, history: historicalDecisions.filter(d=>!d.scenario || d.scenario === scenario), time, resultLabel: STATIC ? "Stored Atlas run" : "This run" });
   const runDecisions: Data[] = result?.decisions || [];
   const outcomeDecision: Data | undefined = runDecisions.filter(d => d.accepted).slice(-1)[0] || runDecisions[runDecisions.length - 1];
   const kpiSource: Data = outcomeDecision?.before || {};

@@ -31,6 +31,7 @@ const describeChange = (c: Data) => {
 const diffSummary = (diff: Data[] = []) =>
   diff.length ? diff.slice(0, 3).map(describeChange).join(" · ") + (diff.length > 3 ? ` · +${diff.length - 3} more` : "") : "no configuration change";
 const plannerName = (p: Data | undefined) => (p?.kind === "llm" ? `LLM · ${p.model || p.provider}` : p?.kind === "rule_based" ? "Rule-based planner" : "Planner");
+const reasonOf = (d: Data) => String(d.reason || "").replace(/\.$/, "");
 const version = (d: Data) => d.candidate?.version || d.proposal?.candidate?.version || "candidate";
 
 // Live stage text from the backend job → which actor sent a message to which.
@@ -96,18 +97,18 @@ function cycleMessages(trigger: Data | null | undefined, decisions: Data[], star
       label: d.before?.objective !== undefined ? `Results are in${d.seed_wins !== undefined ? `: ${v} beat ${d.parent_version} on ${d.seed_wins} of ${seeds} days` : ` for ${v}`}; overall cost ${Number(d.before.objective).toFixed(3)} → ${Number(d.after.objective).toFixed(3)} (lower is better).` : `Results for ${v} are in.`,
       decision: d.accepted ? `PROMOTE ${v}` : `REJECT · ${d.reason || "gate not met"}`, tone: d.accepted ? "ok" : "bad",
     });
-    rows.push({ group, from: "gate", to: "atlas", label: d.accepted ? `Promote ${v}: it cleared every gate. Make it the active harness.` : `Reject ${v}: ${d.reason || "gate not met"}. Keep ${d.parent_version}.`, decision: d.accepted ? `Active harness → ${v}` : `Stored as rejected; ${d.parent_version} stays active`, tone: d.accepted ? "ok" : "neutral" });
+    rows.push({ group, from: "gate", to: "atlas", label: d.accepted ? `Promote ${v}: it cleared every gate. Make it the active harness.` : `Reject ${v}: ${reasonOf(d) || "gate not met"}. Keep ${d.parent_version}.`, decision: d.accepted ? `Active harness → ${v}` : `Stored as rejected; ${d.parent_version} stays active`, tone: d.accepted ? "ok" : "neutral" });
     if (d.accepted) rows.push({ group, from: "atlas", to: "ops", label: `Harness ${v} is live. Operators, switch to the new setup.`, decision: "Agents run the new architecture", tone: "ok" });
-    if (i < decisions.length - 1) rows.push({ group, from: "atlas", to: "planner", label: `Note for your next attempt: ${v} ${d.accepted ? "worked" : "failed"}${d.reason ? `. ${d.reason}` : ""}.`, decision: `Re-plan with this lesson → attempt ${i + 2}`, tone: "neutral" });
+    if (i < decisions.length - 1) rows.push({ group, from: "atlas", to: "planner", label: `Note for your next attempt: ${v} ${d.accepted ? "worked" : "failed"}${reasonOf(d) ? `. ${reasonOf(d)}` : ""}.`, decision: `Re-plan with this lesson → attempt ${i + 2}`, tone: "neutral" });
   });
   return rows;
 }
 
-export function buildLoopMessages({ job, result, busy, action, history, time }: { job: Data | null; result: Data | null; busy: boolean; action: string; history: Data[]; time: (m: any) => string }): { rows: Message[]; source: string } {
+export function buildLoopMessages({ job, result, busy, action, history, time, resultLabel = "This run" }: { job: Data | null; result: Data | null; busy: boolean; action: string; history: Data[]; time: (m: any) => string; resultLabel?: string }): { rows: Message[]; source: string } {
   if (busy && job && action !== "baseline") return { rows: liveMessages(job), source: "Live · streaming from the backend job" };
   if (result && action !== "baseline") {
     const start = result.operations?.harness_version || result.initial?.version || result.decisions?.[0]?.parent_version || result.current?.version || "v1";
-    return { rows: cycleMessages(result.automatic_trigger, result.decisions || [], start, !!result.operations, time, false), source: "This run" };
+    return { rows: cycleMessages(result.automatic_trigger, result.decisions || [], start, !!result.operations, time, false), source: resultLabel };
   }
   if (history.length) {
     const last = history[history.length - 1];
