@@ -4,7 +4,9 @@
 
 BayFlow is a self-improving agent harness for San Francisco transit. Operator agents run a simulated commute on the real Muni/BART/Caltrain network. Harness agents watch how riders are served, propose a new operating architecture, test it on days it has never seen, and keep it only if it measurably wins. Every message, version and decision is stored in MongoDB Atlas.
 
-Live read-only demo: <https://bayflow.dalrae-jin-work.workers.dev> · Source: <https://github.com/jin-dalrae/bayflow> · Video: <https://youtu.be/IAYM_526A10>
+Live read-only demo: <https://bayflow.dalrae-jin-work.workers.dev> · Source: <https://github.com/jin-dalrae/bayflow> · Earlier video (pre-fix run): <https://youtu.be/IAYM_526A10>
+
+Hackathon track: **Recursive Harnessing**: the harness rewrites its own agent architecture and keeps a change only when held-out evaluation proves it.
 
 ## How it works
 
@@ -50,8 +52,8 @@ The cost term means one 90-unit standby bus run breaks even if about three more 
 ## Results so far
 
 - **City Commute on Atlas (`city-intent-v3`):** the service monitor triggered at 4:45 PM; Gemini lowered the local dispatch trigger and the gate **promoted v36 (+3.04% held-out, 5 of 5 days)**; two further Gemini changes on top of v36 were rejected. Seed-42 objective: 0.208 evolved vs 0.226 fixed agents. Artifact: [demo/autonomous-city-v3-atlas.json](demo/autonomous-city-v3-atlas.json).
-- **City Commute offline (`city-intent-v3`):** in an offline Gemini run, the planner tried a transfer-hold rule (rejected, 1 of 5 days), then lowered the local dispatch trigger: **promoted, +3.25% on held-out days, 4 of 5 days won, control within 5%**. Its next change on top of v3 was rejected. On the seed-42 replay the evolved harness scores 0.206 vs 0.226 for fixed agents, and on-time boarding rises from 67.8% to 70.2%. Artifact: [demo/evaluation-city-v3-gemini-offline.json](demo/evaluation-city-v3-gemini-offline.json); an Atlas run is still to be recorded.
-- **What changed to make evolution meaningful:** Gemini's structured output had been rejecting the schema (`maxItems`), so proposals silently fell back to rules; demand ended at only three downtown stops; candidates bundled about six changes; standby vehicles carried riders one segment and vanished; and v2's cost normalizer made every extra run a net loss. All five are fixed, and all earlier city results ran under those conditions (the demo video included).
+- **City Commute offline (`city-intent-v3`):** in an offline Gemini run, the planner tried a transfer-hold rule (rejected, 1 of 5 days), then lowered the local dispatch trigger: **promoted, +3.25% on held-out days, 4 of 5 days won, control within 5%**. Its next change on top of v3 was rejected. On the seed-42 replay the evolved harness scores 0.206 vs 0.226 for fixed agents, and on-time boarding rises from 67.8% to 70.2%. Artifact: [demo/evaluation-city-v3-gemini-offline.json](demo/evaluation-city-v3-gemini-offline.json).
+- **What changed to make evolution meaningful:** Gemini's structured output had been rejecting the schema (`maxItems`), so proposals silently fell back to rules; demand ended at only three downtown stops; candidates bundled about six changes; standby vehicles carried riders one segment and vanished; and v2's cost normalizer made every extra run a net loss. All five are fixed; earlier city results, and the earlier video, ran under those conditions. The current 79-second video (`output/bayflow-demo-v36.mp4`) shows the v36 Atlas run.
 - **Event Surge (earlier compact scenario):** a real Gemini-plus-Atlas run promoted model-generated v4 with a 22.23% lower mean objective; a later fallback proposal regressed 14.26% and was rejected. Evidence: [demo/evaluation-gemini-atlas.json](demo/evaluation-gemini-atlas.json).
 
 Read each decision's `planner.kind` before attributing it to a model: when the model call fails or returns invalid output, the run uses the clearly labeled rule-based fallback. Between the typed-rules change and October 11, Gemini rejected the proposal schema (`maxItems`), so those city proposals are rule-based; this is now fixed.
