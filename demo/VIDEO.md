@@ -1,6 +1,6 @@
 # One-minute recording
 
-**Current video (v36, 79 s):** recorded from the live read-only site <https://bayflow.dalrae-jin-work.workers.dev>, which replays the stored MongoDB Atlas run under `city-intent-v3`. Saved locally as `output/bayflow-demo-v36.mp4` (not committed). Narration, every figure from that run: the service monitor triggered at 4:45 PM with 70% of matured riders boarded within ten minutes (target 80%); Gemini 3.8 Flash, citing earlier bundled failures, proposed one change (local dispatch trigger 1.2 → 0.8); it won all five unseen days (+3.04%) and was promoted as v36; held-out boarding within ten minutes rose 68.9% → 69.9% and on-time arrivals 75.4% → 76.4%; Gemini's next two changes were rejected.
+**Current video (v36, 79 s):** recorded from the live read-only site <https://bayflow.dalrae-jin-work.workers.dev>, which replays the stored MongoDB Atlas run under `city-intent-v3`. Uploaded at <https://youtu.be/oE6TcyYa9_c>. Narration, every figure from that run: the service monitor triggered at 4:45 PM with 70% of matured riders boarded within ten minutes (target 80%); Gemini 3.8 Flash, citing earlier bundled failures, proposed one change (local dispatch trigger 1.2 → 0.8); it won all five unseen days (+3.04%) and was promoted as v36; held-out boarding within ten minutes rose 68.9% → 69.9% and on-time arrivals 75.4% → 76.4%; Gemini's next two changes were rejected.
 
 **Earlier video (64 s, superseded):** recorded before the planner, demand and evaluator fixes; its rule-based candidates were all rejected and v1 stayed active.
 

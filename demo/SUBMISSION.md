@@ -2,7 +2,7 @@
 
 Deadline: Sunday, October 11, 2026, **5:00 PM America/Los_Angeles** (October 12, 00:00 UTC). Leave time for the participant to upload video and complete the organizer's form.
 
-Public source: <https://github.com/jin-dalrae/bayflow>. The 22 isolated backend tests, real official Atlas integration check, frontend build, and two live browser checks passed. Actual offline and Atlas loop artifacts are `demo/evaluation-offline.json` and `demo/evaluation-atlas.json`. Official Sandbox read/write is verified. The current 79-second video is `output/bayflow-demo-v36.mp4`; upload it and add the URL. Live read-only demo: <https://bayflow.dalrae-jin-work.workers.dev>. Run `bash scripts/start.sh`, recheck live database status, record/upload the video, and complete the organizer's form.
+Public source: <https://github.com/jin-dalrae/bayflow>. The 22 isolated backend tests, real official Atlas integration check, frontend build, and two live browser checks passed. Actual offline and Atlas loop artifacts are `demo/evaluation-offline.json` and `demo/evaluation-atlas.json`. Official Sandbox read/write is verified. The current 79-second video is <https://youtu.be/oE6TcyYa9_c>. Live read-only demo: <https://bayflow.dalrae-jin-work.workers.dev>. Run `bash scripts/start.sh`, recheck live database status, record/upload the video, and complete the organizer's form.
 
 A real Gemini 3.8 Flash proposal call also passed the opt-in model test; its actual output and token metadata are preserved in `demo/model-verification.json`. Distinguish this model-generation evidence from the preserved rule-based evaluated loop results.
 
